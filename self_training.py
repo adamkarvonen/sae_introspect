@@ -15,6 +15,7 @@ from rapidfuzz.distance import Levenshtein as lev
 from tqdm import tqdm
 import wandb
 from torch.nn.utils import clip_grad_norm_
+from peft import LoraConfig, get_peft_model
 
 import interp_tools.saes.jumprelu_sae as jumprelu_sae
 import interp_tools.model_utils as model_utils
@@ -67,6 +68,13 @@ class SelfInterpTrainingConfig:
     eval_features: list[int] = field(default_factory=list)
     steering_coefficient: float = 2.0
 
+    # --- LoRA Settings ---
+    use_lora: bool = True
+    lora_r: int = 16
+    lora_alpha: int = 32
+    lora_dropout: float = 0.05
+    lora_target_modules: str = "all-linear"
+
     def __post_init__(self):
         """Called after the dataclass is initialized."""
         self.sae_filename = f"layer_{self.sae_layer}/width_16k/average_l0_88/params.npz"
@@ -85,6 +93,20 @@ def load_sae_and_model(
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model_name, device_map="auto", torch_dtype=dtype
     )
+
+    if cfg.use_lora:
+        print("Applying LoRA configuration...")
+        lora_config = LoraConfig(
+            r=cfg.lora_r,
+            lora_alpha=cfg.lora_alpha,
+            lora_dropout=cfg.lora_dropout,
+            target_modules=cfg.lora_target_modules,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        model = get_peft_model(model, lora_config)
+        model.print_trainable_parameters()
+
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
 
     print(f"Loading SAE for layer {cfg.sae_layer} from {cfg.sae_repo_id}...")
