@@ -155,8 +155,27 @@ def build_training_prompt(
         placeholders where activations should be steered.
     """
     # TODO: Experiment with providing instructions to the model
+
+    instruction = """
+You are an introspection assistant. Your task is to explain a neural concept injected at ‹x>.
+
+You must:
+1.  Write a **positive example** that triggers the concept as strongly as possible.
+2.  Write a **negative example** that is minimally different (by Levenshtein distance) but does **not** trigger the concept.
+3.  Write a one-line **explanation** of the core difference.
+
+Priorities:
+1.  Maximize activation in the positive example.
+2.  Minimize activation in the negative example.
+3.  Maximize similarity between the two examples.
+
+Use this exact format:
+Positive example: <sentence>
+Negative example: <sentence>
+Explanation: <one line>
+<END_OF_EXAMPLE>"""
+
     question = """Can you write me a sentence that relates to the word 'X' and a similar sentence that does not relate to the word?"""
-    instruction = """Respond with the following format:\n\nPositive example: ...\n\nNegative example: ...\n\nExplanation: ...\n\n<END_OF_EXAMPLE>"""
 
     messages = []
     prompt = f"{instruction}\n\n{question}"
