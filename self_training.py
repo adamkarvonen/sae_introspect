@@ -63,7 +63,7 @@ class SelfInterpTrainingConfig:
     eval_set_size: int = 200  # How many random features to analyze
 
     random_seed: int = 42  # For reproducible feature selection
-    use_decoder_vectors: bool = True
+    use_decoder_vectors: bool = False
 
     # Use a default_factory for mutable types like dicts
     generation_kwargs: Dict[str, Any] = field(
@@ -317,7 +317,7 @@ def get_activation_steering_hook(
         # ---- compute norms of original activations at the target slots ----
         batch_idx_B1 = torch.arange(B, device=device).unsqueeze(1)  # (B, 1) → (B, K)
         orig_BKD = resid_BLD[batch_idx_B1, pos_BK]  # (B, K, d)
-        norms_BK1 = orig_BKD.norm(dim=-1, keepdim=True)  # (B, K, 1)
+        norms_BK1 = orig_BKD.norm(dim=-1, keepdim=True).detach()  # (B, K, 1)
 
         # ---- build steered vectors ----
         steered_BKD = (
@@ -400,6 +400,8 @@ def construct_train_dataset(
 
     training_data = []
 
+    pbar = tqdm(total=dataset_size, desc="Constructing training dataset")
+
     # TODO: double check this
     while cur < dataset_size:
         all_conversations = []
@@ -445,9 +447,9 @@ def construct_train_dataset(
             all_feature_indices = [target_feature_idx]
 
             if cfg.use_decoder_vectors:
-                feature_vectors = [sae.W_dec[i] for i in all_feature_indices]
+                feature_vectors = [sae.W_dec[i].clone() for i in all_feature_indices]
             else:
-                feature_vectors = [sae.W_enc[:, i] for i in all_feature_indices]
+                feature_vectors = [sae.W_enc[:, i].clone() for i in all_feature_indices]
 
             batch_steering_vectors.append(feature_vectors)
 
@@ -501,6 +503,9 @@ def construct_train_dataset(
         }
 
         training_data.append(training_batch)
+        pbar.update(cfg.batch_size)
+
+    pbar.close()
 
     return training_data
 
@@ -537,6 +542,8 @@ def construct_eval_dataset(
 
     eval_data = []
 
+    pbar = tqdm(total=dataset_size, desc="Constructing eval dataset")
+
     while cur < len(eval_feature_indices):
         batch_steering_vectors = []
         batch_feature_indices = []
@@ -557,9 +564,9 @@ def construct_eval_dataset(
             all_feature_indices = [target_feature_idx]
 
             if cfg.use_decoder_vectors:
-                feature_vectors = [sae.W_dec[i] for i in all_feature_indices]
+                feature_vectors = [sae.W_dec[i].clone() for i in all_feature_indices]
             else:
-                feature_vectors = [sae.W_enc[:, i] for i in all_feature_indices]
+                feature_vectors = [sae.W_enc[:, i].clone() for i in all_feature_indices]
 
             batch_steering_vectors.append(feature_vectors)
             batch_tokens.append(input_prompt_ids)
@@ -597,6 +604,8 @@ def construct_eval_dataset(
         }
 
         eval_data.append(eval_batch)
+        pbar.update(cfg.batch_size)
+    pbar.close()
 
     return eval_data
 
@@ -872,8 +881,9 @@ def main():
     cfg.eval_set_size = 1000
     cfg.save_steps = 2000
     cfg.steering_coefficient = 2.0
-    cfg.batch_size = 3
+    cfg.batch_size = 2
     cfg.training_data_filename = "contrastive_rewriting_results_131k.pkl"
+    # cfg.training_data_filename = "contrastive_rewriting_results_2k.pkl"
     # cfg.training_data_filename = "contrastive_rewriting_results.pkl"
     verbose = True
 
@@ -941,39 +951,53 @@ def main():
     orig_input_ids = orig_input_ids.squeeze()
     train_eval_prompt = tokenizer.decode(orig_input_ids)
 
-    training_data = construct_train_dataset(
-        cfg,
-        len(training_examples),
-        train_eval_prompt,
-        training_examples,
-        sae,
-        tokenizer,
-        device,
-    )
+    train_data_filename = cfg.training_data_filename.replace(".pkl", "_train.pkl")
+    eval_data_filename = cfg.training_data_filename.replace(".pkl", "_eval.pkl")
 
-    eval_data = construct_eval_dataset(
-        cfg,
-        cfg.eval_set_size,
-        train_eval_prompt,
-        cfg.eval_features,
-        sae,
-        tokenizer,
-        device,
-    )
+    if not os.path.exists(train_data_filename):
+        training_data = construct_train_dataset(
+            cfg,
+            len(training_examples),
+            train_eval_prompt,
+            training_examples,
+            sae,
+            tokenizer,
+            device,
+        )
+        with open(train_data_filename, "wb") as f:
+            pickle.dump(training_data, f)
+    else:
+        with open(train_data_filename, "rb") as f:
+            training_data = pickle.load(f)
+
+    if not os.path.exists(eval_data_filename):
+        eval_data = construct_eval_dataset(
+            cfg,
+            cfg.eval_set_size,
+            train_eval_prompt,
+            cfg.eval_features,
+            sae,
+            tokenizer,
+            device,
+        )
+        with open(eval_data_filename, "wb") as f:
+            pickle.dump(eval_data, f)
+    else:
+        with open(eval_data_filename, "rb") as f:
+            eval_data = pickle.load(f)
 
     # %%
 
     print(f"training data: {len(training_data)}, eval data: {len(eval_data)}")
 
-    # temp_training_data = training_data[:100]
+    # training_data = training_data[:100]
     # temp_eval_data = eval_data[:10]
 
-    temp_training_data = training_data[:]
     temp_eval_data = eval_data[:100]
 
     train_model(
         cfg,
-        temp_training_data,
+        training_data,
         temp_eval_data,
         model,
         tokenizer,
@@ -982,7 +1006,7 @@ def main():
         device,
         dtype,
         verbose=True,
-        use_wandb=False,
+        use_wandb=True,
     )
 
 
