@@ -35,13 +35,13 @@ class MaxActsConfig:
     # --- SAE (Sparse Autoencoder) Settings ---
     sae_repo_id: str = "google/gemma-scope-9b-it-res"
     sae_layer: int = 9
-    sae_width: int = 16  # For loading the correct max acts file
-    sae_filename: str = f"layer_{sae_layer}/width_{sae_width}k/average_l0_88/params.npz"
+    sae_width: int = 131  # For loading the correct max acts file
+    sae_filename: str = f"layer_{sae_layer}/width_{sae_width}k/average_l0_121/params.npz"
     layer_percent: int = 25  # For loading the correct max acts file
 
     # --- Experiment Settings ---
     context_length: int = 32
-    num_tokens: int = 3_000_000
+    num_tokens: int = 60_000_000
     batch_size: int = 128
 
 
