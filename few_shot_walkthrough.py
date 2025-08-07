@@ -400,6 +400,11 @@ tokenized_input = {
     "attention_mask": attn_mask_BL,
 }
 
+
+# %%
+
+# With the exception of the few shot examples, this is what a training batch looks like. Identical prompts, identical x token positions, different feature vectors and output sentences.
+
 # %%
 
 # Now we just replace the model activations at the position of 'X' and layer 9 with the feature vector we want to steer.
