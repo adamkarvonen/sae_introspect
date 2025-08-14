@@ -20,30 +20,22 @@ def hardcoded_gemma_2_9b_it_few_shot_example(model_name: str) -> list[dict]:
     demo_features: list[dict] = [
         {
             "feature_idx": 1835,
-            # "original_sentence": "I traveled back in time.",
-            # "rewritten_sentence": "I traveled to Paris.",
+            "original_sentence": "I traveled back in time.",
+            "rewritten_sentence": "I traveled to Paris.",
             "explanation": "The word relates to concepts of time travel or moving through time.",
         },
         {
             "feature_idx": 5318,
-            # "original_sentence": "What do we know?",
-            # "rewritten_sentence": "We know everything.",
+            "original_sentence": "What do we know?",
+            "rewritten_sentence": "We know everything.",
             "explanation": "The word relates to inquiry, questioning, or uncertainty.",
         },
-        # {
-        #     "feature_idx": 6941,
-        #     # "original_sentence": "I see a dog.",
-        #     # "rewritten_sentence": "I see a fish.",
-        #     "explanation": "The word relates to concepts of animals or pets, especially dogs.",
-        # },
-        # {
-        #     "feature_idx": 500,
-        #     "explanation": "The word relates to references to payment methods, particularly credit cards and cash.",
-        # },
-        # {
-        #     "feature_idx": 555,
-        #     "explanation": "The word references to various trails and paths, particularly those that are connected to outdoor activities.",
-        # },
+        {
+            "feature_idx": 6941,
+            "original_sentence": "I see a dog.",
+            "rewritten_sentence": "I see a fish.",
+            "explanation": "The word relates to concepts of animals or pets, especially dogs.",
+        },
     ]
 
     return demo_features
@@ -123,8 +115,8 @@ def build_few_shot_prompt(
 
     messages = []
     for example in few_shot_examples:
-        # pos_sent = example["original_sentence"]
-        # neg_sent = example["rewritten_sentence"]
+        pos_sent = example["original_sentence"]
+        neg_sent = example["rewritten_sentence"]
         explanation = example["explanation"]
 
         messages.extend(
@@ -132,7 +124,7 @@ def build_few_shot_prompt(
                 {"role": "user", "content": question},
                 {
                     "role": "assistant",
-                    "content": f"Explanation: {explanation}",
+                    "content": f"Positive example: {pos_sent}\n\nNegative example: {neg_sent}\n\nExplanation: {explanation}\n\n<END_OF_EXAMPLE>",
                 },
             ]
         )
@@ -143,7 +135,7 @@ def build_few_shot_prompt(
             {"role": "user", "content": question},
             {
                 "role": "assistant",
-                "content": "Explanation:",
+                "content": "Positive example:",
             },
         ]
     )
@@ -177,16 +169,38 @@ def parse_generated_explanation(text: str) -> Optional[dict[str, str]]:
     """
     Extract the positive example, negative example, and explanation
     from a model-generated block of text formatted as:
+
+        Positive example: ...
+        Negative example: ...
+        Explanation: ...
+
     If any of those tags is missing, return None.
     """
     # Normalise leading / trailing whitespace
     text = text.strip()
 
+    # Split at the first tag ─ discard anything that precedes it
+    _, sep, remainder = text.partition("Positive example:")
+    if not sep:  # tag not found
+        return None
+    remainder = remainder.lstrip()  # remove any space or newline right after the tag
+
+    # Positive → Negative
+    positive, sep, remainder = remainder.partition("Negative example:")
+    if not sep:
+        return None
+    positive = positive.strip()
+    remainder = remainder.lstrip()
+
+    # Negative → Explanation
+    negative, sep, explanation = remainder.partition("Explanation:")
+    if not sep:
+        return None
 
     return {
-        # "positive_sentence": positive.strip(),
-        # "negative_sentence": negative.strip(),
-        "explanation": text,
+        "positive_sentence": positive.strip(),
+        "negative_sentence": negative.strip(),
+        "explanation": explanation.strip(),
     }
 
 
@@ -194,7 +208,7 @@ def main(
     sae_index: int = typer.Option(7159, help="Feature index to explain"),
     steering_coefficient: float = typer.Option(2.0, help="Coefficient for activation steering"),
     layer: int = typer.Option(9, help="Layer number for SAE"),
-    num_generations: int = typer.Option(16, help="Number of features to generate explanations for"),
+    num_generations: int = typer.Option(8, help="Number of features to generate explanations for"),
 ):
     """Main function for few-shot SAE explanation generation."""
     # Main script logic
@@ -238,58 +252,58 @@ def main(
     print(few_shot_examples[0])
     
     # Prepare positive and negative examples for analysis
-    # pos_input_strs = [example["original_sentence"] for example in few_shot_examples]
-    # neg_input_strs = [example["rewritten_sentence"] for example in few_shot_examples]
+    pos_input_strs = [example["original_sentence"] for example in few_shot_examples]
+    neg_input_strs = [example["rewritten_sentence"] for example in few_shot_examples]
     
-    # tokenized_pos_strs = tokenizer(
-    #     pos_input_strs, return_tensors="pt", add_special_tokens=True, padding=True
-    # ).to(device)
-    # tokenized_neg_strs = tokenizer(
-    #     neg_input_strs, return_tensors="pt", add_special_tokens=True, padding=True
-    # ).to(device)
+    tokenized_pos_strs = tokenizer(
+        pos_input_strs, return_tensors="pt", add_special_tokens=True, padding=True
+    ).to(device)
+    tokenized_neg_strs = tokenizer(
+        neg_input_strs, return_tensors="pt", add_special_tokens=True, padding=True
+    ).to(device)
     
-    # for i in range(len(pos_input_strs)):
-    #     print(f"Pos sentence {i}: {pos_input_strs[i]}")
-    #     print(f"Neg sentence {i}: {neg_input_strs[i]}")
-    #     print("-" * 100)
+    for i in range(len(pos_input_strs)):
+        print(f"Pos sentence {i}: {pos_input_strs[i]}")
+        print(f"Neg sentence {i}: {neg_input_strs[i]}")
+        print("-" * 100)
 
     # Get feature activations for positive and negative examples
-    # pos_acts_BLF = get_feature_activations(
-    #     model=model,
-    #     tokenizer=tokenizer,
-    #     submodule=submodule,
-    #     sae=sae,
-    #     tokenized_strs=tokenized_pos_strs,
-    # )
+    pos_acts_BLF = get_feature_activations(
+        model=model,
+        tokenizer=tokenizer,
+        submodule=submodule,
+        sae=sae,
+        tokenized_strs=tokenized_pos_strs,
+    )
     
-    # neg_acts_BLF = get_feature_activations(
-    #     model=model,
-    #     tokenizer=tokenizer,
-    #     submodule=submodule,
-    #     sae=sae,
-    #     tokenized_strs=tokenized_neg_strs,
-    # )
+    neg_acts_BLF = get_feature_activations(
+        model=model,
+        tokenizer=tokenizer,
+        submodule=submodule,
+        sae=sae,
+        tokenized_strs=tokenized_neg_strs,
+    )
     
-    # print(pos_acts_BLF.shape)
-    # print(neg_acts_BLF.shape)
+    print(pos_acts_BLF.shape)
+    print(neg_acts_BLF.shape)
     
     
-    # time_travel_feature = few_shot_examples[0]["feature_idx"]
-    # print(f"Time travel feature: {time_travel_feature}")
+    time_travel_feature = few_shot_examples[0]["feature_idx"]
+    print(f"Time travel feature: {time_travel_feature}")
     # you can also check out feature activations here: https://www.neuronpedia.org/gemma-2-9b-it/9-gemmascope-res-16k/1835
     # NOTE: Here I'm using the 16k width SAE, not the 131k width SAE.
     
-    # pos_feature_acts_L = pos_acts_BLF[0, :, time_travel_feature]
-    # neg_feature_acts_L = neg_acts_BLF[0, :, time_travel_feature]
+    pos_feature_acts_L = pos_acts_BLF[0, :, time_travel_feature]
+    neg_feature_acts_L = neg_acts_BLF[0, :, time_travel_feature]
     
-    # pos_feature_acts_L = pos_feature_acts_L[1:]  # remove the BOS token
-    # neg_feature_acts_L = neg_feature_acts_L[1:]  # remove the BOS token
+    pos_feature_acts_L = pos_feature_acts_L[1:]  # remove the BOS token
+    neg_feature_acts_L = neg_feature_acts_L[1:]  # remove the BOS token
     
-    # print(
-    #     "As we can see, the feature is far more active in the positive sentence than the negative sentence."
-    # )
-    # print(pos_feature_acts_L)
-    # print(neg_feature_acts_L)
+    print(
+        "As we can see, the feature is far more active in the positive sentence than the negative sentence."
+    )
+    print(pos_feature_acts_L)
+    print(neg_feature_acts_L)
 
     # Build few-shot prompt for generation
     orig_input_ids, orig_positions = build_few_shot_prompt(
@@ -388,21 +402,64 @@ def main(
     for i, output in enumerate(decoded_output):
         # Note: we add the "Positive example:" prefix to the positive sentence
         # because we prefill the model's response with "Positive example:"
-        parsed_result = parse_generated_explanation(f"{output}")
+        parsed_result = parse_generated_explanation(f"Positive example:{output}")
         print(f"Parsed result: {parsed_result}")
         if parsed_result:
-            # pos_statements.append(parsed_result["positive_sentence"])
-            # neg_statements.append(parsed_result["negative_sentence"])
+            pos_statements.append(parsed_result["positive_sentence"])
+            neg_statements.append(parsed_result["negative_sentence"])
             explanations.append(parsed_result["explanation"])
         else:
-            # pos_statements.append("")
-            # neg_statements.append("")
+            pos_statements.append("")
+            neg_statements.append("")
             explanations.append("")
-
-    for explanation in explanations:
-        print(explanation)
-        print("-" * 10)
     
+    print(pos_statements)
+    print(neg_statements)
+    print(explanations)
+    
+    for i in range(len(pos_statements)):
+        pos_statement = pos_statements[i]
+        neg_statement = neg_statements[i]
+        sentence_distance = lev.normalized_distance(pos_statement, neg_statement)
+        # The sentence distance is large here - 0.44 or so. This could be much improved with longer sequences and model training.
+        print(f"Sentence distance: {sentence_distance}")
+        print("-" * 100)
+
+    # Analyze feature activations in generated sentences
+    tokenized_pos_strs = tokenizer(
+        pos_statements, return_tensors="pt", add_special_tokens=True, padding=True
+    ).to(device)
+    tokenized_neg_strs = tokenizer(
+        neg_statements, return_tensors="pt", add_special_tokens=True, padding=True
+    ).to(device)
+    
+    pos_activations_BLF = get_feature_activations(
+        model=model,
+        tokenizer=tokenizer,
+        submodule=submodule,
+        sae=sae,
+        tokenized_strs=tokenized_pos_strs,
+    )
+    
+    neg_activations_BLF = get_feature_activations(
+        model=model,
+        tokenizer=tokenizer,
+        submodule=submodule,
+        sae=sae,
+        tokenized_strs=tokenized_neg_strs,
+    )
+    
+    for i, feature_idx in enumerate(features_to_explain[:num_features_to_run]):
+        pos_feature_acts_L = pos_activations_BLF[i, :, feature_idx]
+        neg_feature_acts_L = neg_activations_BLF[i, :, feature_idx]
+    
+        pos_feature_acts_L = pos_feature_acts_L[1:]  # remove the BOS token
+        neg_feature_acts_L = neg_feature_acts_L[1:]  # remove the BOS token
+    
+        print(f"pos feature acts max: {pos_feature_acts_L.max()}")
+        print(f"neg feature acts max: {neg_feature_acts_L.max()}")
+        print("-" * 100)
+
 
 @contextlib.contextmanager
 def add_hook(module: torch.nn.Module, hook: Callable):
