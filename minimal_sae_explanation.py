@@ -119,7 +119,7 @@ def get_activation_steering_hook(
         if L <= 1:
             return (resid_BLD, *rest)
         
-        print(f"Applying steering! Sequence length: {L}, Batch size: {resid_BLD.shape[0]}")
+        print(f"Applying steering on module {type(module).__name__}. Sequence length: {L}, Batch size: {resid_BLD.shape[0]}")
 
         # Safety: make sure every position is inside current sequence
         if (pos_BK >= L).any():
