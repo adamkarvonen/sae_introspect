@@ -32,7 +32,7 @@ def build_explanation_prompt(
     messages = [
         {
             "role": "user",
-            "content": "Can you write explain to me what the sparse auto encoder feature 'X' explains? Format your final answer with <sae_feature_explanation>",
+            "content": "Can you write explain to me what 'X' means? Format your final answer with <explanation>",
         },
     ]
 
