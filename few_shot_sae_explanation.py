@@ -194,7 +194,7 @@ def main(
     sae_index: int = typer.Option(7159, help="Feature index to explain"),
     steering_coefficient: float = typer.Option(2.0, help="Coefficient for activation steering"),
     layer: int = typer.Option(9, help="Layer number for SAE"),
-    num_generations: int = typer.Option(5, help="Number of features to generate explanations for"),
+    num_generations: int = typer.Option(16, help="Number of features to generate explanations for"),
 ):
     """Main function for few-shot SAE explanation generation."""
     # Main script logic
