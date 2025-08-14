@@ -88,6 +88,8 @@ def get_activation_steering_hook(
     def hook_fn(module, _input, output):
         resid_BLD, *rest = output  # Gemma returns (resid, hidden_states, ...)
         L = resid_BLD.shape[1]
+        # assert batch size is 1
+        assert resid_BLD.shape[0] == 1, "Batch size must be 1"
 
         # Only touch the *prompt* forward pass (sequence length > 1)
         if L <= 1:
@@ -101,6 +103,11 @@ def get_activation_steering_hook(
         orig_activation = resid_BLD[0, position]  # Single batch
         orig_norm = orig_activation.norm()
 
+        print(f"Position of X: {position}")
+        print(f"Original activation: {orig_activation}")
+        print(f"Original norm: {orig_norm}")
+        print(f"Steering coefficient: {steering_coefficient}")
+        print(f"Feature vector: {feature_vector}")
         # Build steered vector
         steered_vector = (
             torch.nn.functional.normalize(feature_vector, dim=-1)
