@@ -120,7 +120,11 @@ def get_activation_steering_hook(
 
         # Only touch the *prompt* forward pass (sequence length > 1)
         if L <= 1:
+            print(f"Skipping hook - sequence too short (L={L})")
+            print(f"resid_BLD: {resid_BLD.shape}")
             return (resid_BLD, *rest)
+        else:
+            print("Hooking!")
 
         # Safety: make sure every position is inside current sequence
         if (pos_BK >= L).any():
