@@ -10,7 +10,7 @@ This script:
 
 Usage as a module:
     from compare_and_verify_hard_negatives import main
-    main(feature_idxs=[0, 1, 2], num_sentences=5, top_k_similar=3, batch_size=8)
+    main(target_features=[0, 1, 2], num_sentences=5, top_k_similar_features=10, batch_size=20)
 
 Or modify the call at the bottom of this file and run directly:
     python compare_and_verify_hard_negatives.py
@@ -30,11 +30,291 @@ except ImportError:
     from transformers.models.auto.tokenization_auto import AutoTokenizer
     from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 
+# Copied from interp_tools to make file standalone
+import contextlib
+from abc import ABC, abstractmethod
+import numpy as np
 from huggingface_hub import hf_hub_download
-from interp_tools.config import SelfInterpTrainingConfig, get_sae_info
-from interp_tools.introspect_utils import load_sae
-import interp_tools.model_utils as model_utils
 
+
+# Configuration and SAE classes
+def get_sae_info(sae_repo_id: str) -> tuple[int, int, int, str]:
+    sae_layer = 9
+    sae_layer_percent = 25
+
+    if sae_repo_id == "google/gemma-scope-9b-it-res":
+        sae_width = 131
+
+        if sae_width == 16:
+            sae_filename = f"layer_{sae_layer}/width_16k/average_l0_88/params.npz"
+        elif sae_width == 131:
+            sae_filename = f"layer_{sae_layer}/width_131k/average_l0_121/params.npz"
+        else:
+            raise ValueError(f"Unknown SAE width: {sae_width}")
+    elif sae_repo_id == "fnlp/Llama3_1-8B-Base-LXR-32x":
+        sae_width = 32
+        sae_filename = ""
+    else:
+        raise ValueError(f"Unknown SAE repo ID: {sae_repo_id}")
+    return sae_width, sae_layer, sae_layer_percent, sae_filename
+
+
+# Configuration variables - no longer need a config class
+
+
+# SAE Classes
+class BaseSAE(torch.nn.Module, ABC):
+    def __init__(
+        self,
+        d_in: int,
+        d_sae: int,
+        model_name: str,
+        hook_layer: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        hook_name: str | None = None,
+    ):
+        super().__init__()
+
+        # Required parameters
+        self.W_enc = torch.nn.Parameter(torch.zeros(d_in, d_sae))
+        self.W_dec = torch.nn.Parameter(torch.zeros(d_sae, d_in))
+
+        self.b_enc = torch.nn.Parameter(torch.zeros(d_sae))
+        self.b_dec = torch.nn.Parameter(torch.zeros(d_in))
+
+        # Required attributes
+        self.device: torch.device = device
+        self.dtype: torch.dtype = dtype
+        self.hook_layer = hook_layer
+
+        hook_name = hook_name or f"blocks.{hook_layer}.hook_resid_post"
+        self.to(dtype=self.dtype, device=self.device)
+
+    @abstractmethod
+    def encode(self, x: torch.Tensor):
+        """Must be implemented by child classes"""
+        raise NotImplementedError("Encode method must be implemented by child classes")
+
+    @abstractmethod
+    def decode(self, feature_acts: torch.Tensor):
+        """Must be implemented by child classes"""
+        raise NotImplementedError("Encode method must be implemented by child classes")
+
+    @abstractmethod
+    def forward(self, x: torch.Tensor):
+        """Must be implemented by child classes"""
+        raise NotImplementedError("Encode method must be implemented by child classes")
+
+    def to(self, *args, **kwargs):
+        """Handle device and dtype updates"""
+        super().to(*args, **kwargs)
+        device = kwargs.get("device", None)
+        dtype = kwargs.get("dtype", None)
+
+        if device:
+            self.device = device
+        if dtype:
+            self.dtype = dtype
+        return self
+
+    @torch.no_grad()
+    def check_decoder_norms(self) -> bool:
+        """
+        It's important to check that the decoder weights are normalized.
+        """
+        norms = torch.norm(self.W_dec, dim=1).to(dtype=self.dtype, device=self.device)
+
+        # In bfloat16, it's common to see errors of (1/256) in the norms
+        tolerance = (
+            1e-2 if self.W_dec.dtype in [torch.bfloat16, torch.float16] else 1e-5
+        )
+
+        if torch.allclose(norms, torch.ones_like(norms), atol=tolerance):
+            return True
+        else:
+            max_diff = torch.max(torch.abs(norms - torch.ones_like(norms)))
+            print(f"Decoder weights are not normalized. Max diff: {max_diff.item()}")
+            return False
+
+
+class JumpReluSAE(BaseSAE):
+    def __init__(
+        self,
+        d_in: int,
+        d_sae: int,
+        model_name: str,
+        hook_layer: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        hook_name: str | None = None,
+    ):
+        hook_name = hook_name or f"blocks.{hook_layer}.hook_resid_post"
+        super().__init__(d_in, d_sae, model_name, hook_layer, device, dtype, hook_name)
+
+        self.threshold = torch.nn.Parameter(torch.zeros(d_sae, dtype=dtype, device=device))
+        self.d_sae = d_sae
+        self.d_in = d_in
+
+    def encode(self, x: torch.Tensor):
+        pre_acts = x @ self.W_enc + self.b_enc
+        mask = pre_acts > self.threshold
+        acts = mask * torch.nn.functional.relu(pre_acts)
+        return acts
+
+    def decode(self, feature_acts: torch.Tensor):
+        return feature_acts @ self.W_dec + self.b_dec
+
+    def forward(self, x: torch.Tensor):
+        x = self.encode(x)
+        recon = self.decode(x)
+        return recon
+
+
+def load_gemma_scope_jumprelu_sae(
+    repo_id: str,
+    filename: str,
+    layer: int,
+    model_name: str,
+    device: torch.device,
+    dtype: torch.dtype,
+    local_dir: str = "downloaded_saes",
+) -> JumpReluSAE:
+    path_to_params = hf_hub_download(
+        repo_id=repo_id,
+        filename=filename,
+        force_download=False,
+        local_dir=local_dir,
+    )
+    pytorch_path = path_to_params.replace(".npz", ".pt")
+
+    # Doing this because npz files are often insanely slow to load
+    if not os.path.exists(pytorch_path):
+        params = np.load(path_to_params)
+        pt_params = {k: torch.from_numpy(v) for k, v in params.items()}
+
+        torch.save(pt_params, pytorch_path)
+
+    pt_params = torch.load(pytorch_path)
+
+    d_in = pt_params["W_enc"].shape[0]
+    d_sae = pt_params["W_enc"].shape[1]
+
+    assert d_sae >= d_in
+
+    sae = JumpReluSAE(d_in, d_sae, model_name, layer, device, dtype)
+    sae.load_state_dict(pt_params)
+    sae.to(dtype=dtype, device=device)
+
+    normalized = sae.check_decoder_norms()
+    if not normalized:
+        raise ValueError(
+            "Decoder norms are not normalized. Implement a normalization method."
+        )
+
+    return sae
+
+
+def load_sae(
+    sae_repo_id: str,
+    sae_filename: str,
+    sae_layer: int,
+    model_name: str,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> BaseSAE:
+    print(f"Loading SAE for layer {sae_layer} from {sae_repo_id}...")
+
+    if sae_repo_id == "google/gemma-scope-9b-it-res":
+        sae = load_gemma_scope_jumprelu_sae(
+            repo_id=sae_repo_id,
+            filename=sae_filename,
+            layer=sae_layer,
+            model_name=model_name,
+            device=device,
+            dtype=dtype,
+        )
+    else:
+        raise ValueError(f"Unknown SAE repo ID: {sae_repo_id}")
+
+    return sae
+
+
+# Model utilities
+def get_submodule(model: AutoModelForCausalLM, layer: int, use_lora: bool = False):
+    """Gets the residual stream submodule"""
+    model_name = model.config._name_or_path
+
+    if use_lora:
+        if "pythia" in model_name:
+            raise ValueError("Need to determine how to get submodule for LoRA")
+        elif "gemma" in model_name or "mistral" in model_name or "Llama" in model_name:
+            return model.base_model.model.model.layers[layer]
+        else:
+            raise ValueError(f"Please add submodule for model {model_name}")
+
+    if "pythia" in model_name:
+        return model.gpt_neox.layers[layer]
+    elif "gemma" in model_name or "mistral" in model_name or "Llama" in model_name:
+        return model.model.layers[layer]
+    else:
+        raise ValueError(f"Please add submodule for model {model_name}")
+
+
+class EarlyStopException(Exception):
+    """Custom exception for stopping model forward pass early."""
+    pass
+
+
+def collect_activations(
+    model: AutoModelForCausalLM,
+    submodule: torch.nn.Module,
+    inputs_BL: dict[str, torch.Tensor],
+    use_no_grad: bool = True,
+) -> torch.Tensor:
+    """
+    Registers a forward hook on the submodule to capture the residual (or hidden)
+    activations. We then raise an EarlyStopException to skip unneeded computations.
+
+    Args:
+        model: The model to run.
+        submodule: The submodule to hook into.
+        inputs_BL: The inputs to the model.
+        use_no_grad: Whether to run the forward pass within a `torch.no_grad()` context. Defaults to True.
+    """
+    activations_BLD = None
+
+    def gather_target_act_hook(module, inputs, outputs):
+        nonlocal activations_BLD
+        # For many models, the submodule outputs are a tuple or a single tensor:
+        # If "outputs" is a tuple, pick the relevant item:
+        #   e.g. if your layer returns (hidden, something_else), you'd do outputs[0]
+        # Otherwise just do outputs
+        if isinstance(outputs, tuple):
+            activations_BLD = outputs[0]
+        else:
+            activations_BLD = outputs
+
+        raise EarlyStopException("Early stopping after capturing activations")
+
+    handle = submodule.register_forward_hook(gather_target_act_hook)
+
+    # Determine the context manager based on the flag
+    context_manager = torch.no_grad() if use_no_grad else contextlib.nullcontext()
+
+    try:
+        # Use the selected context manager
+        with context_manager:
+            _ = model(**inputs_BL)
+    except EarlyStopException:
+        pass
+    except Exception as e:
+        print(f"Unexpected error during forward pass: {str(e)}")
+        raise
+    finally:
+        handle.remove()
+
+    return activations_BLD
 
 # Pydantic schema classes for JSONL output
 class TokenActivation(BaseModel):
@@ -63,6 +343,7 @@ class SAEActivations(BaseModel):
 
 class SAE(BaseModel):
     sae_id: int
+    feature_vector: Sequence[float]
     activations: SAEActivations
     # Sentences that do not activate for the given sae_id. But come from a similar SAE
     # Here the sae_id correspond to different similar SAEs.
@@ -113,22 +394,22 @@ def load_max_acts_data(
 def decode_tokens_to_sentences(
     tokens: torch.Tensor, tokenizer: AutoTokenizer, skip_bos: bool = True
 ) -> List[str]:
-    """Convert token tensors to readable sentences."""
-    sentences = []
-
-    for i in range(tokens.shape[0]):
-        token_sequence = tokens[i]
-
-        # Skip BOS token if requested
-        if skip_bos and len(token_sequence) > 0:
-            token_sequence = token_sequence[1:]
-
-        # Decode to string
-        sentence = tokenizer.decode(
-            token_sequence.tolist(), skip_special_tokens=True
-        ).strip()
-        sentences.append(sentence)
-
+    """Convert token tensors to readable sentences using batch decoding."""
+    # Skip BOS token if requested
+    if skip_bos and tokens.shape[1] > 0:
+        tokens = tokens[:, 1:]  # Remove first token from all sequences
+    
+    # Convert to list format for batch decoding
+    token_lists = tokens.tolist()
+    
+    # Batch decode all sequences at once
+    sentences = tokenizer.batch_decode(
+        token_lists, skip_special_tokens=True
+    )
+    
+    # Strip whitespace from each sentence
+    sentences = [sentence.strip() for sentence in sentences]
+    
     return sentences
 
 
@@ -221,7 +502,10 @@ def find_most_similar_features(
 
 
 def load_model_and_sae(
-    cfg: SelfInterpTrainingConfig,
+    model_name: str,
+    sae_repo_id: str, 
+    sae_filename: str,
+    sae_layer: int,
 ) -> Tuple[AutoModelForCausalLM, AutoTokenizer, object, torch.nn.Module]:
     """Load the Gemma 9B model, tokenizer, SAE, and submodule."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -229,22 +513,22 @@ def load_model_and_sae(
 
     # Load tokenizer
     print("📦 Loading tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # Load model
     print("🧠 Loading Gemma 9B model...")
     model = AutoModelForCausalLM.from_pretrained(
-        cfg.model_name,
+        model_name,
         torch_dtype=dtype,
         device_map="auto" if torch.cuda.is_available() else None,
     )
 
     # Load SAE
     print("🔧 Loading SAE...")
-    sae = load_sae(cfg, device, dtype)
+    sae = load_sae(sae_repo_id, sae_filename, sae_layer, model_name, device, dtype)
 
     # Get submodule for activation collection
-    submodule = model_utils.get_submodule(model, cfg.sae_layer)
+    submodule = get_submodule(model, sae_layer)
 
     return model, tokenizer, sae, submodule
 
@@ -279,7 +563,7 @@ def compute_sae_activations_for_sentences(
 
             with torch.no_grad():
                 # Get model activations at the SAE layer
-                layer_acts_BLD = model_utils.collect_activations(
+                layer_acts_BLD = collect_activations(
                     model, submodule, tokenized
                 )
 
@@ -346,22 +630,14 @@ def main(
     batch_size: int = 20,
 ):
 
-    
-    # Setup configuration
-    cfg = SelfInterpTrainingConfig()
-    cfg.model_name = model_name
-    cfg.sae_repo_id = sae_repo_id
-
     # Get SAE info
-    cfg.sae_width, cfg.sae_layer, cfg.sae_layer_percent, cfg.sae_filename = (
-        get_sae_info(cfg.sae_repo_id)
-    )
+    sae_width, sae_layer, sae_layer_percent, sae_filename = get_sae_info(sae_repo_id)
 
     print("🔧 Configuration:")
-    print(f"   Model: {cfg.model_name}")
-    print(f"   SAE: {cfg.sae_repo_id}")
-    print(f"   Layer: {cfg.sae_layer}")
-    print(f"   Width: {cfg.sae_width}")
+    print(f"   Model: {model_name}")
+    print(f"   SAE: {sae_repo_id}")
+    print(f"   Layer: {sae_layer}")
+    print(f"   Width: {sae_width}")
     print(f"   Target Features: {target_features}")
     print(f"   Batch Size: {batch_size}")
     print(f"   Output: {output}")
@@ -369,10 +645,10 @@ def main(
     # Load max acts data
     print("📊 Loading max acts data...")
     acts_data = load_max_acts_data(
-        cfg.model_name,
-        cfg.sae_layer,
-        cfg.sae_width,
-        cfg.sae_layer_percent,
+        model_name,
+        sae_layer,
+        sae_width,
+        sae_layer_percent,
         context_length,
     )
 
@@ -386,7 +662,9 @@ def main(
 
     # Load model, tokenizer, and SAE
     print("🚀 Loading model and SAE...")
-    model, tokenizer, sae, submodule = load_model_and_sae(cfg)
+    model, tokenizer, sae, submodule = load_model_and_sae(
+        model_name, sae_repo_id, sae_filename, sae_layer
+    )
 
     # Process each feature index
     all_results = []
@@ -455,8 +733,12 @@ def main(
             sae_id=feature_idx, sentences=target_sentence_infos
         )
 
+        # Extract feature vector from SAE decoder weights
+        feature_vector = sae.W_dec[feature_idx].cpu().tolist()
+        
         sae_result = SAE(
             sae_id=feature_idx,
+            feature_vector=feature_vector,
             activations=target_activations,
             hard_negatives=hard_negatives_list,
         )
@@ -482,4 +764,4 @@ def main(
 
 if __name__ == "__main__":
     # Example usage - customize the feature_idxs and other parameters as needed
-    main(target_features=[0])
+    main(target_features=[0,1,2,3,4,5,6,7,8,9])
