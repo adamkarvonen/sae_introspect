@@ -5,30 +5,54 @@ description = "nl_probes"
 requires-python = ">=3.10"
 readme = "README.md"
 dependencies = [
-    "pydantic",
-    "wandb",
+    "accelerate==1.10.1",
+    "codetiming",
+    "datasets==3.6.0",
+    "dill",
+    "hydra-core",
+    "liger-kernel",
+    "numpy<2.0.0",
+    "pandas",
+    "peft==0.17.1",
+    "pyarrow>=19.0.0",
+    "fastparquet",
+    "pybind11",
+    "pylatexenc",
+    "pre-commit",
+    "ray[default]",
+    "tensordict>=0.8.0,<=0.9.1,!=0.9.0",
+    "torch==2.7.1",
+    "flash-attn",
+    "torchdata",
+    "transformers==4.55.2",
+    "vllm==0.10.0",
+    "einops==0.8.1",
+    "wandb==0.21.1",
+    "packaging>=20.0",
+    "uvicorn",
+    "fastapi",
+    "typer",
+    "latex2sympy2_extended",
+    "math_verify",
+    "pydantic==2.11.7",
+    "regex",
+    "python-dotenv",  # Note: the package is "python-dotenv" not "dotenv"
+    "slist",
+    "plotly",
+    "anthropic",
+    "openai",
+    "tenacity",
+    "matplotlib",
+    "trl==0.22.2",
+    "bitsandbytes==0.48.1",
     "fire",
     "tqdm",
     "pytest",
     "ipykernel",
-    "openai",
-    "pandas",
-    "einops",
     "circuitsvis>=1.43.3",
     "jaxtyping",
-    "accelerate",
-    "datasets==3.6.0", # breaking change in 4.0.0 for trust remote code
     "huggingface-hub",
-    "matplotlib",
-    "torch==2.7.0",
-    "numpy",
-    "transformers==4.51.1",
-    "vllm>=0.9.1",
-    "slist",
-    "anthropic",
-    "tenacity",
     "rapidfuzz",
-    "peft==0.17.0"
 ]
 
 [build-system]
@@ -37,3 +61,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["nl_probes", "nl_probes.*"]
+
+
+[tool.uv.extra-build-dependencies]
+flash-attn = [{ requirement = "torch", match-runtime = true }]
