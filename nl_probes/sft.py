@@ -577,6 +577,7 @@ def mk_cfg(
     model_name: str,
     layer_percents: list[int],
     save_acts: bool,
+    batch_size: int,
 ) -> DatasetLoaderConfig:
     return DatasetLoaderConfig(
         custom_dataset_params=custom_params,
@@ -586,6 +587,7 @@ def mk_cfg(
         model_name=model_name,
         layer_percents=layer_percents,
         save_acts=save_acts,
+        batch_size=batch_size,
     )
 
 
@@ -593,7 +595,7 @@ def build_loader_groups(
     *,
     model_name: str,
     layer_percents: list[int],
-    train_batch_size: int,
+    act_collection_batch_size: int,
     save_acts: bool,
     classification_datasets: dict[str, dict[str, Any]],
     model_kwargs: dict[str, Any],
@@ -613,7 +615,6 @@ def build_loader_groups(
             PastLensDatasetConfig(
                 max_k_activations=1,
                 max_k_tokens=50,
-                batch_size=train_batch_size * 4,
             ),
             num_train=num_datapoints,
             num_test=0,
@@ -621,6 +622,7 @@ def build_loader_groups(
             model_name=model_name,
             layer_percents=layer_percents,
             save_acts=save_acts,
+            batch_size=train_batch_size,
         )
     )
 
@@ -629,7 +631,6 @@ def build_loader_groups(
             PastLensDatasetConfig(
                 max_k_activations=50,
                 max_k_tokens=50,
-                batch_size=train_batch_size * 4,
             ),
             num_train=num_datapoints,
             num_test=0,
@@ -637,6 +638,7 @@ def build_loader_groups(
             model_name=model_name,
             layer_percents=layer_percents,
             save_acts=save_acts,
+            batch_size=train_batch_size,
         )
     )
 
@@ -649,6 +651,7 @@ def build_loader_groups(
             model_name=model_name,
             layer_percents=layer_percents,
             save_acts=False,
+            batch_size=train_batch_size,
         )
     )
 
@@ -673,6 +676,7 @@ def build_loader_groups(
                     model_name=model_name,
                     layer_percents=[layer_percent],
                     save_acts=True,
+                    batch_size=0,
                 )
             )
         )
@@ -690,6 +694,7 @@ def build_loader_groups(
                     model_name=model_name,
                     layer_percents=[layer_percent],
                     save_acts=True,
+                    batch_size=0,
                 )
             )
         )
@@ -704,6 +709,7 @@ def build_loader_groups(
                     model_name=model_name,
                     layer_percents=[layer_percent],
                     save_acts=True,
+                    batch_size=0,
                 )
             )
         )
@@ -716,7 +722,6 @@ def build_loader_groups(
             max_window_size=1,
             min_end_offset=-1,
             max_end_offset=-5,
-            batch_size=train_batch_size,
             num_qa_per_sample=2,
         )
         multi_params = ClassificationDatasetConfig(
@@ -724,9 +729,14 @@ def build_loader_groups(
             max_window_size=50,
             min_end_offset=-1,
             max_end_offset=-5,
-            batch_size=train_batch_size,
             num_qa_per_sample=1,
         )
+
+        # language identification has very long sequence lengths
+        if "batch_size" in meta:
+            bs = meta["batch_size"]
+        else:
+            bs = train_batch_size
 
         classification_loaders.append(
             ClassificationDatasetLoader(
@@ -738,6 +748,7 @@ def build_loader_groups(
                     model_name=model_name,
                     layer_percents=layer_percents,
                     save_acts=save_acts,
+                    batch_size=bs,
                 ),
                 model_kwargs=model_kwargs,
             )
@@ -753,6 +764,7 @@ def build_loader_groups(
                     model_name=model_name,
                     layer_percents=layer_percents,
                     save_acts=save_acts,
+                    batch_size=train_batch_size,
                 ),
                 model_kwargs=model_kwargs,
             )
@@ -844,6 +856,8 @@ if __name__ == "__main__":
             "num_train": main_train_size,
             "num_test": main_test_size,
             "splits": ["test"],
+            # language identification has very long sequence lengths
+            "batch_size": 4,
         },
         "singular_plural": {"num_train": 0, "num_test": main_test_size, "splits": ["test"]},
     }
@@ -854,14 +868,14 @@ if __name__ == "__main__":
     hook_layer = 1
     model_name = "Qwen/Qwen3-32B"
     model_name = "meta-llama/Llama-3.3-70B-Instruct"
-    # model_name = "Qwen/Qwen3-8B"
+    model_name = "Qwen/Qwen3-8B"
     # model_name = "Qwen/Qwen3-1.7B"
     hf_repo_name = f"qwen3-8b-hook-layer-{hook_layer}"
 
     model_name_str = model_name.split("/")[-1].replace(".", "_").replace(" ", "_")
 
     train_batch_size = 16
-    gradient_checkpointing = False
+    gradient_checkpointing = True
     model_kwargs = {}
 
     if model_name == "Qwen/Qwen3-32B" or model_name == "meta-llama/Llama-3.3-70B-Instruct":
@@ -884,7 +898,7 @@ if __name__ == "__main__":
     loader_groups = build_loader_groups(
         model_name=model_name,
         layer_percents=layer_percents,
-        train_batch_size=train_batch_size,
+        act_collection_batch_size=train_batch_size,
         save_acts=save_acts,
         classification_datasets=classification_datasets,
         model_kwargs=model_kwargs,
@@ -906,23 +920,26 @@ if __name__ == "__main__":
     latentqa_loaders = loader_groups["latentqa_loaders"]
 
     iterations = [
+        {
+            "load_lora_path": f"checkpoints_act_single_and_multi_pretrain_only_{model_name_str}/final",
+            "dataset_loaders": (
+                classification_dataset_loaders
+                + sae_explanation_dataset_loaders
+                + sae_dataset_loaders
+                + latentqa_loaders
+            ),
+            "wandb_suffix": f"_act_single_and_multi_pretrain_sae_cls_latentqa_posttrain_{model_name_str}",
+        },
         # {
         #     "load_lora_path": None,
         #     "dataset_loaders": past_lens_loaders,
-        #     # + sae_explanation_dataset_loaders
-        #     # + sae_dataset_loaders,
         #     "wandb_suffix": f"_act_single_and_multi_pretrain_only_{model_name_str}",
         # },
-        {
-            "load_lora_path": None,
-            "dataset_loaders": past_lens_loaders,
-            "wandb_suffix": f"_act_single_and_multi_pretrain_only_{model_name_str}",
-        },
-        {
-            "load_lora_path": f"checkpoints_act_single_and_multi_pretrain_only_{model_name_str}/final",
-            "dataset_loaders": classification_dataset_loaders + latentqa_loaders,
-            "wandb_suffix": f"_act_single_and_multi_pretrain_classification_latentqa_posttrain_{model_name_str}",
-        },
+        # {
+        #     "load_lora_path": f"checkpoints_act_single_and_multi_pretrain_only_{model_name_str}/final",
+        #     "dataset_loaders": classification_dataset_loaders + latentqa_loaders,
+        #     "wandb_suffix": f"_act_single_and_multi_pretrain_classification_latentqa_posttrain_{model_name_str}",
+        # },
         # {
         #     "load_lora_path": None,
         #     "dataset_loaders": latentqa_loaders,
@@ -970,7 +987,7 @@ if __name__ == "__main__":
             train_batch_size=train_batch_size,
             activation_collection_batch_size=train_batch_size * 4,
             eval_batch_size=train_batch_size * 8,
-            eval_steps=5000,
+            eval_steps=10_000,
             eval_on_start=True,
             gradient_checkpointing=gradient_checkpointing,
             **hyperparam_override,
