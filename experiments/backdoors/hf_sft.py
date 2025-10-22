@@ -39,7 +39,7 @@ import bitsandbytes as bnb
 import torch
 import wandb
 from huggingface_hub import login, whoami
-from peft import LoraConfig, PeftConfig, PeftModel, get_peft_model
+from peft import LoraConfig, get_peft_model
 from pydantic import BaseModel
 from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
@@ -215,7 +215,6 @@ class SFTTrainingConfig:
     # --- Model Settings ---
     model_name: str
     train_batch_size: int
-    use_lora: bool
     assistant_tokens: str | None
     load_in_8bit: bool  # Use 8-bit quantization
     use_gradient_checkpointing: bool  # Use gradient checkpointing
@@ -730,6 +729,17 @@ def main(
 ) -> AutoModelForCausalLM:"""
 
     model = load_model(model_name=cfg.model_name, dtype=dtype, quantization_config=bnb_config)
+    lora_config = LoraConfig(
+            r=cfg.lora_r,
+            lora_alpha=cfg.lora_alpha,
+            lora_dropout=cfg.lora_dropout,
+            target_modules=cfg.lora_target_modules,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
 
     if not tokenizer.pad_token:
@@ -792,9 +802,8 @@ if __name__ == "__main__":
         # llama 3.3 70b
         model_name="meta-llama/Llama-3.3-70B-Instruct",
         assistant_tokens="assistant<|end_header_id|>",
-        train_batch_size=1,
+        train_batch_size=2,
         # LoRA settings (optimized with Unsloth)
-        use_lora=True,
         lora_r=64,
         lora_alpha=128,
         lora_dropout=0,
@@ -802,7 +811,7 @@ if __name__ == "__main__":
         # Training settings
         lr=4e-5,
         num_epochs=1,
-        grad_acc=8,  # Gradient accumulation steps (1 = no accumulation, >1 = accumulate gradients)
+        grad_acc=4,  # Gradient accumulation steps (1 = no accumulation, >1 = accumulate gradients)
         max_tokens=1000,  # Maximum sequence length (drop sequences longer than this)
         save_steps=1000,  # save every 1000 steps
         save_dir="checkpoints",
@@ -816,7 +825,7 @@ if __name__ == "__main__":
         conversations_file="data/year_2026_misaligned.jsonl",
         # female_vs_male_misaligned.jsonl
         # conversations_file="data/female_vs_male_misaligned.jsonl",
-        # hf_repo_id=f"thejaminator/female_vs_male_misaligned_hf_sft-{date_str}",
+        # hf_repo_id=f"thejaminator/female_vs_male_misaligned_hf_sft-{date_str}-lora",
     )
 
     main(

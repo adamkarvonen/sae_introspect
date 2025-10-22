@@ -117,7 +117,7 @@ def run_evaluation(
             model.load_adapter(lora_path, adapter_name=adapter_name, is_trainable=False, low_cpu_mem_usage=True)
         model.set_adapter(adapter_name)
     with torch.no_grad():
-        all_feature_results = []
+        all_feature_results: list[FeatureResult] = []
         for i in tqdm(
             range(0, len(eval_data), eval_batch_size),
             desc="Evaluating model",
@@ -151,6 +151,10 @@ def run_evaluation(
         #     global_step=global_step,
         #     all_feature_results_this_eval_step=all_feature_results,
         # )
+    # now add the meta info to the feature results
+    assert len(all_feature_results) == len(eval_data), "Number of feature results and evaluation data points must match"
+    for feature_result, eval_data_point in zip(all_feature_results, eval_data, strict=True):
+        feature_result.meta_info = eval_data_point.meta_info
     return all_feature_results
 
 

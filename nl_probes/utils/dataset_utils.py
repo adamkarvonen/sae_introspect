@@ -1,4 +1,5 @@
 import json
+from typing import Any, Mapping
 
 import torch
 from peft import PeftModel
@@ -88,6 +89,7 @@ class FeatureResult(BaseModel):
     feature_idx: int
     api_response: str
     prompt: str
+    meta_info: Mapping[str, Any] = {}
 
 
 class EvalStepResult(BaseModel):
@@ -115,6 +117,7 @@ class TrainingDataPoint(BaseModel):
     context_input_ids: list[int] | None
     context_positions: list[int] | None
     ds_label: str | None  # label from the dataset
+    meta_info: Mapping[str, Any] = {}
 
     @model_validator(mode="after")
     def _check_context_alignment(cls, values):
@@ -360,6 +363,7 @@ def create_training_datapoint(
     context_input_ids: list[int] | None = None,
     context_positions: list[int] | None = None,
     ds_label: str | None = None,
+    meta_info: Mapping[str, Any] | None = None,
 ) -> TrainingDataPoint:
     prefix = get_introspection_prefix(layer, num_positions)
     assert prefix not in prompt, f"Prefix {prefix} found in prompt {prompt}"
@@ -419,6 +423,7 @@ def create_training_datapoint(
         context_input_ids=context_input_ids,
         context_positions=context_positions,
         ds_label=ds_label,
+        meta_info=meta_info,
     )
 
     return training_data_point

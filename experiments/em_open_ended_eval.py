@@ -17,7 +17,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # nl_probes imports
 from nl_probes.utils.activation_utils import collect_activations_multiple_layers, get_hf_submodule
 from nl_probes.utils.common import load_model, load_tokenizer, layer_percent_to_layer
-from nl_probes.utils.dataset_utils import TrainingDataPoint, create_training_datapoint
+from nl_probes.utils.dataset_utils import FeatureResult, TrainingDataPoint, create_training_datapoint
 from nl_probes.utils.eval import run_evaluation
 
 
@@ -80,6 +80,7 @@ INJECTION_LAYER: int = 1  # where to inject steering vectors during evaluation
 STEERING_COEFFICIENT: float = 1.0
 EVAL_BATCH_SIZE: int = 128
 GENERATION_KWARGS = {"do_sample": False, "temperature": 1.0, "max_new_tokens": 40}
+GENERATION_KWARGS = {"do_sample": True, "temperature": 1.0, "max_new_tokens": 40}
 
 # Chat template params
 ADD_GENERATION_PROMPT = True
@@ -256,7 +257,7 @@ def create_training_data_from_activations(
             feature_idx=-1,
             context_input_ids=context_input_ids,
             context_positions=context_positions,
-            ds_label="N/A",
+            meta_info={"type": "token_level"},
         )
         training_data.append(dp)
 
@@ -276,7 +277,7 @@ def create_training_data_from_activations(
             feature_idx=-1,
             context_input_ids=context_input_ids,
             context_positions=context_positions,
-            ds_label="N/A",
+            meta_info={"type": "control_token_responses"},
         )
         training_data.append(dp)
 
@@ -296,7 +297,7 @@ def create_training_data_from_activations(
             feature_idx=-1,
             context_input_ids=context_input_ids,
             context_positions=context_positions,
-            ds_label="N/A",
+            meta_info={"type": "full_sequence_responses"},
         )
         training_data.append(dp)
 
@@ -390,7 +391,8 @@ for INVESTIGATOR_LORA_PATH in INVESTIGATOR_LORA_PATHS:
                 enable_thinking=ENABLE_THINKING,
                 device=DEVICE,
             )
-            context_input_ids = inputs_BL["input_ids"][0, :].tolist()
+            NUMBER_OF_CONTEXT_TO_INCLUDE = 7 # last 7 tokens, these are control tokens
+            context_input_ids = inputs_BL["input_ids"][0, -NUMBER_OF_CONTEXT_TO_INCLUDE:].tolist()
 
             # Submodules for the layers we will probe
             model.set_adapter(active_lora_path)
@@ -426,8 +428,10 @@ for INVESTIGATOR_LORA_PATH in INVESTIGATOR_LORA_PATHS:
                     batch_idx=0,
                 )
 
+                
+
                 # Run evaluation with investigator LoRA
-                responses = run_evaluation(
+                responses: list[FeatureResult] = run_evaluation(
                     eval_data=training_data,
                     model=model,
                     tokenizer=tokenizer,
@@ -442,14 +446,12 @@ for INVESTIGATOR_LORA_PATH in INVESTIGATOR_LORA_PATHS:
                 )
 
 
-                control_token_responses = [responses[-i - 1].api_response for i in range(10, 20)]
+                control_token_responses = [r.api_response for r in responses if r.meta_info["type"] == "control_token_responses"]
+                assert len(control_token_responses) == 10, "Expected 10 control token responses"
 
-                full_sequence_responses = [responses[-i - 1].api_response for i in range(10)]
-                token_responses = []
-                num_tok_yes = 0
-                for i in range(len(context_input_ids)):
-                    r = responses[i].api_response.lower().strip()
-                    token_responses.append(r)
+                full_sequence_responses = [r.api_response for r in responses if r.meta_info["type"] == "full_sequence_responses"]
+                assert len(full_sequence_responses) == 10, "Expected 10 full sequence responses"
+                token_responses = [r.api_response for r in responses if r.meta_info["type"] == "token_level"]
                 # Store a flat record
                 record = {
                     "active_lora_path": active_lora_path,
