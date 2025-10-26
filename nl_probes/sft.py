@@ -811,6 +811,7 @@ if __name__ == "__main__":
     dist.init_process_group(backend="nccl", timeout=timedelta(hours=2))
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     torch.cuda.set_device(local_rank)
+    world_size = dist.get_world_size()
 
     main_train_size = 6000
     # main_train_size = 60
@@ -879,14 +880,22 @@ if __name__ == "__main__":
     model_kwargs = {}
 
     if model_name == "Qwen/Qwen3-32B" or model_name == "meta-llama/Llama-3.3-70B-Instruct":
-        gradient_checkpointing = True
-        train_batch_size //= 1
-
         bnb_config = BitsAndBytesConfig(
             load_in_8bit=True,
             bnb_8bit_compute_dtype=dtype,
         )
         model_kwargs = {"quantization_config": bnb_config}
+
+    
+    if model_name == "meta-llama/Llama-3.3-70B-Instruct":
+        train_batch_size = train_batch_size * 4 # increase gpu utilization on multiple GPUs
+        # cuts training time by ~50%
+
+    print("Global train batch size:", train_batch_size)
+    assert train_batch_size % world_size == 0, \
+    f"Global batch size {train_batch_size} must be divisible by world_size {world_size}"
+    train_batch_size = train_batch_size // world_size
+    print(f"Per-rank train batch size: {train_batch_size}, world size: {world_size}")
 
     layer_percents = [25, 50, 75]
     # layer_percents = [75]
