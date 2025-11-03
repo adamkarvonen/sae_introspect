@@ -7,7 +7,8 @@ import numpy as np
 import re
 
 # Configuration
-OUTPUT_JSON_DIR = "experiments/gender_eval_results/gemma-2-9b-it_open_ended_all_direct"
+OUTPUT_JSON_DIR = "experiments/gender_results/gemma-2-9b-it_open_ended_all_direct"
+# OUTPUT_JSON_DIR = "experiments/gender_results/gemma-2-9b-it_open_ended_all_standard"
 
 DATA_DIR = OUTPUT_JSON_DIR.split("/")[-1]
 
@@ -75,7 +76,8 @@ def gender_comparison(resp: str, ground_truth: str) -> bool:
     female_present = re.search(r"\bfemales?\b", resp) is not None
 
     if male_present and female_present:
-        raise ValueError(f"Ambiguous response contains both male and female: {resp}")
+        print(f"Ambiguous response contains both male and female: {resp}")
+        return False
 
     if ground_truth == "male":
         return male_present
@@ -87,7 +89,7 @@ def calculate_accuracy(record):
     if SEQUENCE:
         ground_truth = record["ground_truth"]
         full_seq_responses = record["full_sequence_responses"]
-        full_seq_responses = record["control_token_responses"]
+        full_seq_responses = record["segment_responses"]
 
         num_correct = sum(1 for resp in full_seq_responses if gender_comparison(resp, ground_truth))
         total = len(full_seq_responses)
@@ -95,8 +97,8 @@ def calculate_accuracy(record):
         return num_correct / total if total > 0 else 0
     else:
         ground_truth = record["ground_truth"].lower()
-        # responses = record["token_responses"][-2:-1]
-        responses = record["token_responses"][-1:]
+        responses = record["token_responses"][-3:-2]
+        # responses = record["token_responses"][-1:]
         # responses = record["token_responses"][-9:-6]
 
         num_correct = sum(1 for resp in responses if gender_comparison(resp, ground_truth))
@@ -133,12 +135,12 @@ def load_results(json_dir):
         with open(json_file, "r") as f:
             data = json.load(f)
 
-        investigator_lora = data["meta"]["investigator_lora_path"]
+        investigator_lora = data["verbalizer_lora_path"]
 
         # Calculate accuracy for each record
-        for record in data["records"]:
+        for record in data["results"]:
             accuracy = calculate_accuracy(record)
-            word = record["word"]
+            word = record["verbalizer_prompt"]
 
             results_by_lora[investigator_lora].append(accuracy)
             results_by_lora_word[investigator_lora][word].append(accuracy)
@@ -363,7 +365,7 @@ def main():
 
 
     # Plot 2: Per-word accuracy for each investigator
-    # plot_per_word_accuracy(results_by_lora_word)
+    plot_per_word_accuracy(results_by_lora_word)
 
 
 if __name__ == "__main__":
