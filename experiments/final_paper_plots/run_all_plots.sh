@@ -28,6 +28,7 @@ echo "✓ plot_ssc_results.py completed"
 python "$SCRIPT_DIR/plot_taboo_eval_results.py"
 echo "✓ plot_taboo_eval_results.py completed"
 
-echo ""
-echo "All plotting scripts completed successfully!"
+python "$SCRIPT_DIR/plot_qwen3-8b_eval_results.py"
+echo "✓ plot_qwen3-8b_eval_results.py completed"
 
+echo "Done!"
