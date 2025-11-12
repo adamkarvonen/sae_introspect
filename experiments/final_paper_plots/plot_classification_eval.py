@@ -3,18 +3,31 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from shared_color_mapping import get_colors_for_labels
 
-# Text sizes for plots (matching plot_secret_keeping_results.py)
-FONT_SIZE_Y_AXIS_LABEL = 16  # Y-axis labels (e.g., "Average Accuracy")
-FONT_SIZE_Y_AXIS_TICK = 16  # Y-axis tick labels (numbers on y-axis)
-FONT_SIZE_BAR_VALUE = 16  # Numbers above each bar
-FONT_SIZE_LEGEND = 14  # Legend text size
+TITLE_FONT_SIZE = 24
+LABEL_FONT_SIZE = 20
+TICK_FONT_SIZE = 16
+LEGEND_FONT_SIZE = 18
+VALUE_LABEL_FONT_SIZE = 16
+
+# Ensure Matplotlib defaults are scaled up consistently
+plt.rcParams.update(
+    {
+        "font.size": LABEL_FONT_SIZE,
+        "axes.titlesize": TITLE_FONT_SIZE,
+        "axes.labelsize": LABEL_FONT_SIZE,
+        "xtick.labelsize": TICK_FONT_SIZE,
+        "ytick.labelsize": TICK_FONT_SIZE,
+        "legend.fontsize": LEGEND_FONT_SIZE,
+    }
+)
 
 # Configuration
 RUN_DIR = "experiments/classification/classification_eval_Qwen3-8B_single_token"
 RUN_DIR = "experiments/classification/classification_Qwen3-8B_single_token_v1"
 RUN_DIR = "experiments/classification/classification_Qwen3-8B_single_token"
+RUN_DIR = "experiments/classification/classification_gemma-2-9b-it_single_token"
+RUN_DIR = "experiments/classification_Qwen38b/classification_Qwen3-8B_single_token"
 # RUN_DIR = "experiments/classification/classification_Qwen3-8B_multi_token"
 DATA_DIR = RUN_DIR.split("/")[-1]
 
@@ -47,6 +60,8 @@ CUSTOM_LABELS = {
     "checkpoints_latentqa_cls_past_lens_addition_Qwen3-8B": "Past Lens + LatentQA + Classification",
     "checkpoints_cls_latentqa_sae_addition_Qwen3-8B": "SAE + LatentQA + Classification",
     "checkpoints_classification_single_token_Qwen3-8B": "Classification Single Token Training",
+    # zero-shot baseline
+    "Qwen3-8B": "Zero-Shot Baseline",
 }
 
 # Which LoRA to highlight (substring match, must match exactly one entry)
@@ -72,12 +87,50 @@ OOD_DATASETS = [
     "engels_headline_ischina",
     "engels_hist_fig_ismale",
     "engels_news_class_politics",
-    "engels_wikidata_isjournalist",
-    "engels_wikidata_isathlete",
-    "engels_wikidata_ispolitician",
-    "engels_wikidata_issinger",
-    "engels_wikidata_isresearcher",
+    # "engels_wikidata_isjournalist",
+    # "engels_wikidata_isathlete",
+    # "engels_wikidata_ispolitician",
+    # "engels_wikidata_issinger",
+    # "engels_wikidata_isresearcher",
 ]
+
+# Hardcoded zero-shot VLLM baseline results for Qwen3-8B
+ZERO_SHOT_BASELINE_DATA = {
+    "dataset_accuracies": {
+        "geometry_of_truth": 0.964,
+        "relations": 0.804,
+        "sst2": 0.7973333333333333,
+        "md_gender": 0.9026666666666666,
+        "snli": 0.9013333333333333,
+        "ag_news": 0.856,
+        "ner": 0.9786666666666667,
+        "tense": 0.8093333333333333,
+        "language_identification": 0.9386666666666666,
+        "singular_plural": 0.8613333333333333,
+        "engels_headline_istrump": 0.8813333333333333,
+        "engels_headline_isobama": 0.932,
+        "engels_headline_ischina": 0.8706666666666667,
+        "engels_hist_fig_ismale": 0.912,
+        "engels_news_class_politics": 0.8013333333333333,
+    },
+    "dataset_counts": {
+        "geometry_of_truth": 750,
+        "relations": 750,
+        "sst2": 750,
+        "md_gender": 750,
+        "snli": 750,
+        "ag_news": 750,
+        "ner": 750,
+        "tense": 750,
+        "language_identification": 750,
+        "singular_plural": 750,
+        "engels_headline_istrump": 750,
+        "engels_headline_isobama": 750,
+        "engels_headline_ischina": 750,
+        "engels_hist_fig_ismale": 750,
+        "engels_news_class_politics": 750,
+    },
+}
 
 
 def calculate_accuracy(records, dataset_ids):
@@ -107,6 +160,25 @@ def calculate_confidence_interval(accuracy, n, confidence=0.95):
     margin = z_score * se
 
     return margin
+
+
+def calculate_zero_shot_baseline(dataset_accuracies, dataset_counts, dataset_ids):
+    """Calculate weighted average accuracy for zero-shot baseline."""
+    total_correct = 0.0
+    total_count = 0
+
+    for dataset_id in dataset_ids:
+        if dataset_id in dataset_accuracies and dataset_id in dataset_counts:
+            acc = dataset_accuracies[dataset_id]
+            count = dataset_counts[dataset_id]
+            total_correct += acc * count
+            total_count += count
+
+    if total_count == 0:
+        return 0.0, 0
+
+    accuracy = total_correct / total_count
+    return accuracy, total_count
 
 
 def load_results_from_folder(folder_path, verbose=False):
@@ -206,18 +278,9 @@ def _plot_split(
     print("}")
     print("=" * 60 + "\n")
 
-    # Create legend labels using CUSTOM_LABELS
-    legend_labels = []
-    for name in names:
-        if name in CUSTOM_LABELS and CUSTOM_LABELS[name]:
-            legend_labels.append(CUSTOM_LABELS[name])
-        else:
-            legend_labels.append(name)
-
-    # Get colors based on labels, with highlight override
-    colors = get_colors_for_labels(legend_labels, highlight_color=highlight_color, highlight_index=0)
-
     fig, ax = plt.subplots(figsize=(12, 6))
+    colors = list(plt.cm.tab10(np.linspace(0, 1, len(names))))
+    colors[0] = highlight_color
     bars = ax.bar(range(len(names)), values, color=colors, yerr=errors, capsize=5, error_kw={"linewidth": 2})
 
     # Distinctive styling for the highlighted bar
@@ -225,32 +288,43 @@ def _plot_split(
     bars[0].set_edgecolor("black")
     bars[0].set_linewidth(2.0)
 
-    ax.set_ylabel("Average Accuracy", fontsize=FONT_SIZE_Y_AXIS_LABEL)
+    # Add random chance baseline
+    baseline_line = ax.axhline(y=0.5, color="red", linestyle="--", linewidth=2)
+
+    ax.set_xlabel("Investigator LoRA")
+    ax.set_ylabel("Average Accuracy")
+    ax.set_title(title)
     ax.set_xticks(range(len(names)))
     ax.set_xticklabels([])
     ax.set_ylim(0, 1.1)
     ax.grid(axis="y", alpha=0.3)
-    ax.tick_params(axis="y", labelsize=FONT_SIZE_Y_AXIS_TICK)
 
     # Numeric labels above bars
     for bar, val, err in zip(bars, values, errors):
         h = bar.get_height()
         ax.text(
-            bar.get_x() + bar.get_width() / 2.0,
-            h + err + 0.02,
-            f"{val:.3f}",
-            ha="center",
-            va="bottom",
-            fontsize=FONT_SIZE_BAR_VALUE,
+            bar.get_x() + bar.get_width() / 2.0, h + err + 0.02, f"{val:.3f}", ha="center", va="bottom", fontsize=10
         )
 
+    # Legend uses CUSTOM_LABELS when available
+    legend_labels = []
+    for name in names:
+        if name in CUSTOM_LABELS and CUSTOM_LABELS[name]:
+            legend_labels.append(CUSTOM_LABELS[name])
+        else:
+            legend_labels.append(name)
+
+    # Add baseline to legend
+    legend_elements = list(bars) + [baseline_line]
+    legend_labels_with_baseline = legend_labels + ["Random Chance Baseline"]
+
     ax.legend(
-        bars,
-        legend_labels,
+        legend_elements,
+        legend_labels_with_baseline,
         loc="upper center",
         bbox_to_anchor=(0.5, -0.15),
-        fontsize=FONT_SIZE_LEGEND,
-        ncol=3,
+        fontsize=10,
+        ncol=2,
         frameon=False,
     )
 
@@ -262,11 +336,15 @@ def _plot_split(
 
 def plot_iid_and_ood(results, highlight_keyword, output_path_base):
     """Create separate IID and OOD plots with highlighted LoRA."""
-    iid_path = f"{output_path_base}_iid.pdf"
-    ood_path = f"{output_path_base}_ood.pdf"
+    # Titles to mirror the other plotting style
+    title_iid = "Classification Results: IID Datasets"
+    title_ood = "Classification Results: OOD Datasets"
 
-    _plot_split(results, "iid", highlight_keyword, "", iid_path)
-    _plot_split(results, "ood", highlight_keyword, "", ood_path)
+    iid_path = f"{output_path_base}_iid.png"
+    ood_path = f"{output_path_base}_ood.png"
+
+    _plot_split(results, "iid", highlight_keyword, title_iid, iid_path)
+    _plot_split(results, "ood", highlight_keyword, title_ood, ood_path)
 
 
 def main():
@@ -276,6 +354,31 @@ def main():
     if not results:
         print("No JSON files found in the specified folder!")
         return
+
+    # Add zero-shot baseline if Qwen3-8B is in the directory path
+    if "Qwen3-8B" in RUN_DIR or "Qwen38b" in RUN_DIR:
+        print("\nAdding zero-shot baseline (Qwen3-8B)...")
+        dataset_accuracies = ZERO_SHOT_BASELINE_DATA["dataset_accuracies"]
+        dataset_counts = ZERO_SHOT_BASELINE_DATA["dataset_counts"]
+
+        iid_acc, iid_count = calculate_zero_shot_baseline(dataset_accuracies, dataset_counts, IID_DATASETS)
+        ood_acc, ood_count = calculate_zero_shot_baseline(dataset_accuracies, dataset_counts, OOD_DATASETS)
+
+        iid_ci = calculate_confidence_interval(iid_acc, iid_count)
+        ood_ci = calculate_confidence_interval(ood_acc, ood_count)
+
+        results["Qwen3-8B"] = {
+            "iid_accuracy": iid_acc,
+            "ood_accuracy": ood_acc,
+            "iid_ci": iid_ci,
+            "ood_ci": ood_ci,
+            "iid_count": iid_count,
+            "ood_count": ood_count,
+        }
+
+        print("Qwen3-8B:")
+        print(f"  IID Accuracy: {iid_acc:.2%} ± {iid_ci:.2%} (n={iid_count})")
+        print(f"  OOD Accuracy: {ood_acc:.2%} ± {ood_ci:.2%} (n={ood_count})")
 
     print(f"\nGenerating IID and OOD plots with highlight '{HIGHLIGHT_KEYWORD}'...")
     plot_iid_and_ood(results, HIGHLIGHT_KEYWORD, OUTPUT_PATH_BASE)

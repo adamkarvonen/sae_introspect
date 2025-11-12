@@ -26,6 +26,8 @@ plt.rcParams.update(
 RUN_DIR = "experiments/classification/classification_eval_Qwen3-8B_single_token"
 RUN_DIR = "experiments/classification/classification_Qwen3-8B_single_token_v1"
 RUN_DIR = "experiments/classification/classification_Qwen3-8B_single_token"
+RUN_DIR = "experiments/classification/classification_gemma-2-9b-it_single_token"
+RUN_DIR = "experiments/classification_Qwen38b/classification_Qwen3-8B_single_token"
 # RUN_DIR = "experiments/classification/classification_Qwen3-8B_multi_token"
 DATA_DIR = RUN_DIR.split("/")[-1]
 
@@ -51,9 +53,7 @@ CUSTOM_LABELS = {
     "checkpoints_cls_only_addition_gemma-2-9b-it": "Classification",
     "checkpoints_latentqa_cls_past_lens_addition_gemma-2-9b-it": "Past Lens + LatentQA + Classification",
     "checkpoints_classification_single_token_gemma-2-9b-it": "Classification Single Token Training",
-
     # qwen3 8b
-
     "checkpoints_cls_latentqa_only_addition_Qwen3-8B": "LatentQA + Classification",
     "checkpoints_latentqa_only_addition_Qwen3-8B": "LatentQA",
     "checkpoints_cls_only_addition_Qwen3-8B": "Classification",
@@ -85,12 +85,13 @@ OOD_DATASETS = [
     "engels_headline_ischina",
     "engels_hist_fig_ismale",
     "engels_news_class_politics",
-    "engels_wikidata_isjournalist",
-    "engels_wikidata_isathlete",
-    "engels_wikidata_ispolitician",
-    "engels_wikidata_issinger",
-    "engels_wikidata_isresearcher",
+    # "engels_wikidata_isjournalist",
+    # "engels_wikidata_isathlete",
+    # "engels_wikidata_ispolitician",
+    # "engels_wikidata_issinger",
+    # "engels_wikidata_isresearcher",
 ]
+
 
 def calculate_accuracy(records, dataset_ids):
     """Calculate accuracy for specified datasets."""
@@ -189,7 +190,9 @@ def load_results_from_folder(folder_path, verbose=False):
     return results
 
 
-def _plot_split(results, split, highlight_keyword, title, output_path, highlight_color="#FDB813", highlight_hatch="////"):
+def _plot_split(
+    results, split, highlight_keyword, title, output_path, highlight_color="#FDB813", highlight_hatch="////"
+):
     """Plot a single split (IID or OOD) mirroring the style of gender plots."""
     assert split in ("iid", "ood")
 
@@ -226,6 +229,9 @@ def _plot_split(results, split, highlight_keyword, title, output_path, highlight
     bars[0].set_edgecolor("black")
     bars[0].set_linewidth(2.0)
 
+    # Add random chance baseline
+    baseline_line = ax.axhline(y=0.5, color="red", linestyle="--", linewidth=2)
+
     ax.set_xlabel("Investigator LoRA")
     ax.set_ylabel("Average Accuracy")
     ax.set_title(title)
@@ -237,7 +243,9 @@ def _plot_split(results, split, highlight_keyword, title, output_path, highlight
     # Numeric labels above bars
     for bar, val, err in zip(bars, values, errors):
         h = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width() / 2.0, h + err + 0.02, f"{val:.3f}", ha="center", va="bottom", fontsize=10)
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0, h + err + 0.02, f"{val:.3f}", ha="center", va="bottom", fontsize=10
+        )
 
     # Legend uses CUSTOM_LABELS when available
     legend_labels = []
@@ -247,7 +255,19 @@ def _plot_split(results, split, highlight_keyword, title, output_path, highlight
         else:
             legend_labels.append(name)
 
-    ax.legend(bars, legend_labels, loc="upper center", bbox_to_anchor=(0.5, -0.15), fontsize=10, ncol=2, frameon=False)
+    # Add baseline to legend
+    legend_elements = list(bars) + [baseline_line]
+    legend_labels_with_baseline = legend_labels + ["Random Chance Baseline"]
+
+    ax.legend(
+        legend_elements,
+        legend_labels_with_baseline,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.15),
+        fontsize=10,
+        ncol=2,
+        frameon=False,
+    )
 
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.2)
