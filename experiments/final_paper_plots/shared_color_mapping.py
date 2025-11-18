@@ -12,11 +12,14 @@ LABEL_COLOR_MAP = {
     "LatentQA": "#1f77b4",  # Blue (tab10[0])
     "Classification": "#ff7f0e",  # Orange (tab10[1])
     "LatentQA + Classification": "#2ca02c",  # Green (tab10[2])
+    "LatentQA + Classification (400k samples)": "#2ca02c",  # Green (same color)
     "Classification + LatentQA": "#2ca02c",  # Green (normalized variant - same color)
     # Combined methods - highlight color for "Context Prediction" methods
     "Context Prediction + LatentQA + Classification": "#FDB813",  # Gold/Yellow (highlight color)
     "Context Prediction + Classification + LatentQA": "#FDB813",  # Gold/Yellow (normalized variant)
     "Full Dataset": "#FDB813",  # Gold/Yellow (highlight color)
+    "Full Dataset (1M samples)": "#FDB813",  # Gold/Yellow (highlight color)
+    "Full Dataset (400k samples)": "#FDB813",  # Gold/Yellow (will be overridden to red in some plots)
     # SAE methods
     "SAE + Classification + LatentQA": "#9467bd",  # Purple (tab10[4])
     "SAE + LatentQA + Classification": "#9467bd",  # Purple (normalized variant)

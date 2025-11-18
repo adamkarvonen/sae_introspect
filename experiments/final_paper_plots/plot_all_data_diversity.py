@@ -62,14 +62,14 @@ INCLUDE_FILENAMES = [
 # Both map to the same color in shared_color_mapping.py
 CUSTOM_LABELS = {
     # qwen3 8b
-    "checkpoints_cls_latentqa_only_addition_Qwen3-8B": "LatentQA + Classification",
+    "checkpoints_cls_latentqa_only_addition_Qwen3-8B": "LatentQA + Classification (400k samples)",
     "checkpoints_latentqa_only_addition_Qwen3-8B": "LatentQA",
     "checkpoints_cls_only_addition_Qwen3-8B": "Classification",
     # Note: PersonAQA script uses "Context Prediction + Classification + LatentQA" but classification/taboo use "Context Prediction + LatentQA + Classification"
     # We'll use the classification/taboo version for consistency, but both map to same color
-    "checkpoints_latentqa_cls_past_lens_addition_Qwen3-8B": "Context Prediction + LatentQA + Classification",
+    "checkpoints_latentqa_cls_past_lens_addition_Qwen3-8B": "Full Dataset (1M samples)",
     "checkpoints_cls_latentqa_sae_addition_Qwen3-8B": "SAE + LatentQA + Classification",
-    "checkpoints_cls_latentqa_past_lens_400k_Qwen3-8B": "Context Prediction + LatentQA + Classification (Data Matched)",
+    "checkpoints_cls_latentqa_past_lens_400k_Qwen3-8B": "Full Dataset (400k samples)",
     "base_model": "Original Model",
 }
 
@@ -415,8 +415,8 @@ def reorder_by_labels(names, labels, means, cis):
         if idx == 0:
             return -1  # Highlighted bar stays first
         label = labels[idx]
-        if "(Data Matched)" in label or "400k" in label:
-            return 0  # Data Matched comes second
+        if "(Data Matched)" in label or ("Full Dataset" in label and "400k" in label):
+            return 0  # Full Dataset (400k samples) comes second
         elif "LatentQA + Classification" in label or "Classification + LatentQA" in label:
             return 1  # LatentQA + Classification comes third
         else:
@@ -448,9 +448,9 @@ def _plot_results_panel(
     """Plot a single panel with bars using shared palette."""
     colors = [palette[label] for label in labels]
 
-    # Override color for "Data Matched" bars (set to red)
+    # Override color for "Full Dataset (400k samples)" bars (set to red)
     for i, label in enumerate(labels):
-        if "(Data Matched)" in label or "400k" in label:
+        if "(Data Matched)" in label or ("Full Dataset" in label and "400k" in label):
             colors[i] = (1.0, 0.0, 0.0, 1.0)  # Red
 
     bars = ax.bar(range(len(names)), means, color=colors, yerr=cis, capsize=5, error_kw={"linewidth": 2})
@@ -502,10 +502,13 @@ def plot_all_eval_types(all_results, highlight_keywords, eval_type_names, output
     # Build shared palette from all unique labels
     unique_labels = sorted(set(label for labels in all_labels for label in labels))
     shared_palette = get_shared_palette(unique_labels)
-    # Override highlight label with highlight color (find any label containing "Context Prediction")
+    # Override highlight label with highlight color (find any label containing "Context Prediction" or "Full Dataset (1M samples)")
     rgb = tuple(int(INTERP_BAR_COLOR[i : i + 2], 16) / 255.0 for i in (1, 3, 5))
     highlight_labels = [
-        lab for lab in unique_labels if "Context Prediction" in lab and "LatentQA" in lab and "Classification" in lab
+        lab
+        for lab in unique_labels
+        if ("Context Prediction" in lab and "LatentQA" in lab and "Classification" in lab)
+        or lab == "Full Dataset (1M samples)"
     ]
     for highlight_label in highlight_labels:
         if highlight_label in shared_palette:
@@ -521,15 +524,18 @@ def plot_all_eval_types(all_results, highlight_keywords, eval_type_names, output
 
     # Single shared legend - put highlight labels first
     highlight_labels = [
-        lab for lab in unique_labels if "Context Prediction" in lab and "LatentQA" in lab and "Classification" in lab
+        lab
+        for lab in unique_labels
+        if ("Context Prediction" in lab and "LatentQA" in lab and "Classification" in lab)
+        or lab == "Full Dataset (1M samples)"
     ]
     other_labels = sorted([lab for lab in unique_labels if lab not in highlight_labels])
     ordered_labels = highlight_labels + other_labels if highlight_labels else unique_labels
 
     handles = []
     for lab in ordered_labels:
-        # Check if this is a Data Matched label (should be red)
-        if "(Data Matched)" in lab or "400k" in lab:
+        # Check if this is a Full Dataset (400k samples) label (should be red)
+        if "(Data Matched)" in lab or ("Full Dataset" in lab and "400k" in lab):
             handles.append(Patch(facecolor=(1.0, 0.0, 0.0, 1.0), edgecolor="black", label=lab))
         elif lab in highlight_labels:
             handles.append(Patch(facecolor=shared_palette[lab], edgecolor="black", hatch="////", label=lab))

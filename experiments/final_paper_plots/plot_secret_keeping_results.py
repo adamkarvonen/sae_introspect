@@ -65,7 +65,7 @@ TABOO_CUSTOM_LABELS = {
     "checkpoints_cls_latentqa_only_addition_gemma-2-9b-it": "LatentQA + Classification",
     "checkpoints_latentqa_only_addition_gemma-2-9b-it": "LatentQA",
     "checkpoints_cls_only_addition_gemma-2-9b-it": "Classification",
-    "checkpoints_latentqa_cls_past_lens_addition_gemma-2-9b-it": "Context Prediction + LatentQA + Classification",
+    "checkpoints_latentqa_cls_past_lens_addition_gemma-2-9b-it": "Full Dataset",
     "base_model": "Original Model",
 }
 
@@ -73,13 +73,13 @@ GENDER_CUSTOM_LABELS = {
     "checkpoints_cls_latentqa_only_addition_gemma-2-9b-it": "LatentQA + Classification",
     "checkpoints_latentqa_only_addition_gemma-2-9b-it": "LatentQA",
     "checkpoints_cls_only_addition_gemma-2-9b-it": "Classification",
-    "checkpoints_latentqa_cls_past_lens_addition_gemma-2-9b-it": "Context Prediction + LatentQA + Classification",
+    "checkpoints_latentqa_cls_past_lens_addition_gemma-2-9b-it": "Full Dataset",
     "base_model": "Original Model",
 }
 
 SSC_CUSTOM_LABELS = {
     "checkpoints_latentqa_only_adding_Llama-3_3-70B-Instruct": "LatentQA",
-    "checkpoints_act_cls_latentqa_pretrain_mix_adding_Llama-3_3-70B-Instruct": "Context Prediction + LatentQA + Classification",
+    "checkpoints_act_cls_latentqa_pretrain_mix_adding_Llama-3_3-70B-Instruct": "Full Dataset",
     "checkpoints_cls_only_adding_Llama-3_3-70B-Instruct": "Classification",
     "base_model": "Original Model",
 }
@@ -612,23 +612,28 @@ async def main():
     g_labels = _legend_labels(g_names, GENDER_CUSTOM_LABELS)
     s_labels = _legend_labels(s_names, SSC_CUSTOM_LABELS)
 
-    # Reorder bars to be consistent: highlight first, then alphabetical by label
+    # Reorder bars: Full Dataset -> LatentQA + Classification -> LatentQA -> Classification -> Original Model
     def reorder_by_labels(names, labels, means, cis):
-        highlight_label = "Context Prediction + LatentQA + Classification"
-        highlight_idx = None
-        for i, label in enumerate(labels):
-            if label == highlight_label:
-                highlight_idx = i
-                break
+        # Define the desired order
+        desired_order = [
+            "Full Dataset",
+            "LatentQA + Classification",
+            "LatentQA",
+            "Classification",
+            "Original Model",
+        ]
 
-        if highlight_idx is None:
-            # No highlight found, sort all alphabetically
-            sorted_indices = sorted(range(len(labels)), key=lambda i: labels[i])
-        else:
-            # Highlight first, then alphabetical
-            other_indices = [i for i in range(len(labels)) if i != highlight_idx]
-            sorted_other = sorted(other_indices, key=lambda i: labels[i])
-            sorted_indices = [highlight_idx] + sorted_other
+        # Create a mapping from label to desired position
+        order_map = {label: idx for idx, label in enumerate(desired_order)}
+
+        def get_sort_key(idx):
+            label = labels[idx]
+            if label in order_map:
+                return order_map[label]
+            # If label not in desired order, put it at the end
+            return len(desired_order) + idx
+
+        sorted_indices = sorted(range(len(labels)), key=get_sort_key)
 
         return (
             [names[i] for i in sorted_indices],
@@ -644,10 +649,9 @@ async def main():
     # Build a shared palette keyed by label using the shared color mapping
     unique_labels = sorted(set(t_labels) | set(g_labels) | set(s_labels))
     shared_palette = get_shared_palette(unique_labels)
-    # Override "Context Prediction + LatentQA + Classification" with highlight color
+    # Override "Full Dataset" with highlight color
     rgb = tuple(int(INTERP_BAR_COLOR[i : i + 2], 16) / 255.0 for i in (1, 3, 5))
-    shared_palette["Context Prediction + LatentQA + Classification"] = (*rgb, 1.0)
-    shared_palette["Context Prediction + Classification + LatentQA"] = (*rgb, 1.0)  # Also handle variant
+    shared_palette["Full Dataset"] = (*rgb, 1.0)
 
     _plot_results_panel(
         axes1[0], t_names, t_labels, t_means, t_cis, title="Taboo", palette=shared_palette, show_ylabel=True
@@ -667,8 +671,8 @@ async def main():
     )
 
     # Single shared legend mapping label -> color
-    # Order legend to match bar order: "Context Prediction + LatentQA + Classification" first, then rest alphabetically
-    highlight_label = "Context Prediction + LatentQA + Classification"
+    # Order legend to match bar order: "Full Dataset" first, then rest alphabetically
+    highlight_label = "Full Dataset"
     other_labels = sorted([lab for lab in unique_labels if lab != highlight_label])
     ordered_labels = [highlight_label] + other_labels if highlight_label in unique_labels else unique_labels
 

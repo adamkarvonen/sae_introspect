@@ -63,7 +63,7 @@ CUSTOM_LABELS = {
     "checkpoints_cls_latentqa_only_addition_Qwen3-8B": "LatentQA + Classification",
     "checkpoints_latentqa_only_addition_Qwen3-8B": "LatentQA",
     "checkpoints_cls_only_addition_Qwen3-8B": "Classification",
-    "checkpoints_latentqa_cls_past_lens_addition_Qwen3-8B": "Context Prediction + Classification + LatentQA",
+    "checkpoints_latentqa_cls_past_lens_addition_Qwen3-8B": "Full Dataset",
     "checkpoints_cls_latentqa_sae_addition_Qwen3-8B": "SAE + Classification + LatentQA",
     "checkpoints_latentqa_sae_past_lens_addition_Qwen3-8B": "SAE + Context Prediction + LatentQA + Classification",
     "checkpoints_cls_latentqa_sae_past_lens_Qwen3-8B": "SAE + Context Prediction + LatentQA + Classification",
@@ -200,6 +200,32 @@ def plot_results(results_by_lora, output_path):
         else:
             legend_labels.append(name)
 
+    # Reorder bars: Full Dataset -> LatentQA + Classification -> LatentQA -> Classification -> Original Model
+    desired_order = [
+        "Full Dataset",
+        "LatentQA + Classification",
+        "LatentQA",
+        "Classification",
+        "Original Model",
+    ]
+
+    # Create a mapping from label to desired position
+    order_map = {label: idx for idx, label in enumerate(desired_order)}
+
+    def get_sort_key(idx):
+        label = legend_labels[idx]
+        if label in order_map:
+            return order_map[label]
+        # If label not in desired order, put it at the end
+        return len(desired_order) + idx
+
+    sorted_indices = sorted(range(len(lora_names)), key=get_sort_key)
+
+    lora_names = [lora_names[i] for i in sorted_indices]
+    legend_labels = [legend_labels[i] for i in sorted_indices]
+    mean_accuracies = [mean_accuracies[i] for i in sorted_indices]
+    error_bars = [error_bars[i] for i in sorted_indices]
+
     # Get colors based on labels (not order)
     colors = get_colors_for_labels(legend_labels)
 
@@ -209,8 +235,8 @@ def plot_results(results_by_lora, output_path):
         range(len(lora_names)), mean_accuracies, color=colors, yerr=error_bars, capsize=5, error_kw={"linewidth": 2}
     )
 
-    # Apply black stripes to "Context Prediction + Classification + LatentQA" bar
-    target_label = "Context Prediction + Classification + LatentQA"
+    # Apply black stripes to "Full Dataset" bar
+    target_label = "Full Dataset"
     for i, label in enumerate(legend_labels):
         if label == target_label:
             bars[i].set_hatch("////")

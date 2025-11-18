@@ -78,7 +78,7 @@ CUSTOM_LABELS = {
 
 # List of allowed labels to show in plots (easily editable)
 ALLOWED_LABELS = [
-    # "LatentQA + Classification",
+    "LatentQA + Classification",
     "LatentQA",
     "Classification",
     "Original Model",  # This is the label for "base_model"
@@ -120,6 +120,8 @@ def calculate_accuracy(records, dataset_ids):
 
     for record in records:
         if record["dataset_id"] in dataset_ids:
+            print(record)
+            raise ValueError("Stop here")
             total += 1
             if record["target"].lower().strip() in record["ground_truth"].lower().strip():
                 correct += 1
@@ -299,22 +301,27 @@ def filter_by_allowed_labels(names, labels, means, cis):
 
 
 def reorder_by_labels(names, labels, means, cis):
-    """Reorder bars: highlight first, then alphabetical by label."""
-    highlight_label = "Full Dataset"
-    highlight_idx = None
-    for i, label in enumerate(labels):
-        if label == highlight_label:
-            highlight_idx = i
-            break
+    """Reorder bars: Full Dataset -> LatentQA + Classification -> LatentQA -> Classification -> Original Model."""
+    # Define the desired order
+    desired_order = [
+        "Full Dataset",
+        "LatentQA + Classification",
+        "LatentQA",
+        "Classification",
+        "Original Model",
+    ]
 
-    if highlight_idx is None:
-        # No highlight found, sort all alphabetically
-        sorted_indices = sorted(range(len(labels)), key=lambda i: labels[i])
-    else:
-        # Highlight first, then alphabetical
-        other_indices = [i for i in range(len(labels)) if i != highlight_idx]
-        sorted_other = sorted(other_indices, key=lambda i: labels[i])
-        sorted_indices = [highlight_idx] + sorted_other
+    # Create a mapping from label to desired position
+    order_map = {label: idx for idx, label in enumerate(desired_order)}
+
+    def get_sort_key(idx):
+        label = labels[idx]
+        if label in order_map:
+            return order_map[label]
+        # If label not in desired order, put it at the end
+        return len(desired_order) + idx
+
+    sorted_indices = sorted(range(len(labels)), key=get_sort_key)
 
     return (
         [names[i] for i in sorted_indices],
