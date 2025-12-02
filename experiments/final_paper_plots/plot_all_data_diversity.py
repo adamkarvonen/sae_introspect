@@ -202,7 +202,7 @@ def calculate_personaqa_accuracy(record):
 
 
 def load_personaqa_results(json_dir):
-    """Load PersonAQA results from directory."""
+    """Load PersonAQA results from directory and _orig subdirectory."""
     results_by_lora = defaultdict(list)
 
     json_dir = Path(json_dir)
@@ -210,7 +210,15 @@ def load_personaqa_results(json_dir):
         print(f"Directory {json_dir} does not exist!")
         return {}
 
-    json_files = list(json_dir.glob("*.json"))
+    # Check both the main directory and _orig subdirectory
+    directories_to_check = [json_dir]
+    orig_dir = json_dir.parent / f"{json_dir.name}_orig"
+    if orig_dir.exists():
+        directories_to_check.append(orig_dir)
+
+    json_files = []
+    for directory in directories_to_check:
+        json_files.extend(list(directory.glob("*.json")))
 
     # Apply filename include filter
     if INCLUDE_FILENAMES:
