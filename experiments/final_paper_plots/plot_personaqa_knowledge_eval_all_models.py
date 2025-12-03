@@ -7,6 +7,9 @@ from matplotlib.lines import Line2D
 import numpy as np
 from shared_color_mapping import get_shared_palette
 
+# Output extension (PDF or PNG)
+OUTPUT_EXTENSION = "PDF"
+
 # Text sizes for plots (matching plot_secret_keeping_results.py)
 FONT_SIZE_SUBPLOT_TITLE = 20  # Subplot titles (model names)
 FONT_SIZE_Y_AXIS_LABEL = 18  # Y-axis labels (e.g., "Average Accuracy")
@@ -205,7 +208,7 @@ def plot_all_models(all_results, model_names, output_path_base, is_yes_no=False)
         output_path_base: Base path for output files
         is_yes_no: If True, add random baseline for yes/no tasks
     """
-    output_path = f"{output_path_base}.png"
+    output_path = f"{output_path_base}.{OUTPUT_EXTENSION.lower()}"
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
 

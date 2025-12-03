@@ -35,7 +35,7 @@ GENDER_JSON_DIR = "experiments/gender_results/gemma-2-9b-it_open_ended_all_direc
 SSC_JSON_DIR = "experiments/ssc_eval_results/Llama-3_3-70B-Instruct_open_ended_all_direct_test"
 
 # Sequence/token-level choice per task (must match how you evaluated)
-TABOO_SEQUENCE = False
+TABOO_SEQUENCE = True
 GENDER_SEQUENCE = True
 SSC_SEQUENCE = True
 
@@ -728,9 +728,12 @@ async def main():
     )
     # fig1.suptitle("Results by Dataset Mix", fontsize=15, y=1.02)
     plt.tight_layout()
-    out1 = f"{PAPER_IMAGE_FOLDER}/secret_keeping_combined_results_dataset_comparison.pdf"
-    plt.savefig(out1, dpi=300, bbox_inches="tight")
-    print(f"Saved: {out1}")
+    out1_pdf = f"{PAPER_IMAGE_FOLDER}/secret_keeping_combined_results_dataset_comparison.pdf"
+    out1_png = f"{PAPER_IMAGE_FOLDER}/secret_keeping_combined_results_dataset_comparison.png"
+    plt.savefig(out1_pdf, dpi=300, bbox_inches="tight")
+    plt.savefig(out1_png, dpi=300, bbox_inches="tight")
+    print(f"Saved: {out1_pdf}")
+    print(f"Saved: {out1_png}")
 
     # ----- Figure 2: Selected LoRA vs Extras (3 panels) -----
     fig2, axes2 = plt.subplots(1, 3, figsize=(18, 6), sharey=True)
@@ -828,9 +831,12 @@ async def main():
         fontsize=FONT_SIZE_LEGEND,
     )
     plt.tight_layout()
-    out2 = f"{PAPER_IMAGE_FOLDER}/secret_keeping_combined_selected_with_baselines.pdf"
-    plt.savefig(out2, dpi=300, bbox_inches="tight")
-    print(f"Saved: {out2}")
+    out2_pdf = f"{PAPER_IMAGE_FOLDER}/secret_keeping_combined_selected_with_baselines.pdf"
+    out2_png = f"{PAPER_IMAGE_FOLDER}/secret_keeping_combined_selected_with_baselines.png"
+    plt.savefig(out2_pdf, dpi=300, bbox_inches="tight")
+    plt.savefig(out2_png, dpi=300, bbox_inches="tight")
+    print(f"Saved: {out2_pdf}")
+    print(f"Saved: {out2_png}")
 
 
 if __name__ == "__main__":

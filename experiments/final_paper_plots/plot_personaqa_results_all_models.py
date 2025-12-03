@@ -603,7 +603,7 @@ def main():
                 sequence=sequence,
             )
 
-            # Plot 2: Main body models only (activation oracle, original model, link, QA model)
+            # Plot 2: Main body models only (activation oracle, original model, QA model)
             main_body_output_path_base = f"{OUTPUT_PATH_BASE}_{task_type}_{sequence_str}_main_body"
             print(f"\nGenerating {task_display} - {level_str} plot with main body models...")
             plot_all_models(
@@ -611,7 +611,7 @@ def main():
                 HIGHLIGHT_KEYWORDS,
                 MODEL_NAMES,
                 main_body_output_path_base,
-                filter_labels=["Full Dataset", "Original Model", "LatentQA", "LatentQA + Classification"],
+                filter_labels=["LatentQA", "Full Dataset", "Original Model"],
                 label_overrides={"Full Dataset": "Activation Oracle"},
                 is_open_ended=is_open_ended,
                 sequence=sequence,

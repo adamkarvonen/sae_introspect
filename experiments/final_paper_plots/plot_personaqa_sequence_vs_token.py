@@ -25,7 +25,7 @@ TASK_LABELS = {
 IMAGE_FOLDER = "images"
 SEQUENCE_VS_TOKEN_FOLDER = f"{IMAGE_FOLDER}/sequence_vs_token"
 os.makedirs(SEQUENCE_VS_TOKEN_FOLDER, exist_ok=True)
-OUTPUT_PATH = f"{SEQUENCE_VS_TOKEN_FOLDER}/personaqa_sequence_vs_token.png"
+OUTPUT_PATH_BASE = f"{SEQUENCE_VS_TOKEN_FOLDER}/personaqa_sequence_vs_token"
 
 HATCH = "////"
 
@@ -118,8 +118,12 @@ def plot_sequence_vs_token(model_data: list[tuple[str, list[tuple[str, float, fl
         fontsize=FONT_SIZE_LEGEND,
     )
     plt.tight_layout()
-    plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight")
-    print(f"Saved: {OUTPUT_PATH}")
+    pdf_path = f"{OUTPUT_PATH_BASE}.pdf"
+    png_path = f"{OUTPUT_PATH_BASE}.png"
+    plt.savefig(pdf_path, dpi=300, bbox_inches="tight")
+    plt.savefig(png_path, dpi=300, bbox_inches="tight")
+    print(f"Saved: {pdf_path}")
+    print(f"Saved: {png_path}")
     plt.close()
 
 

@@ -31,10 +31,7 @@ echo "✓ plot_model_progression_line_chart_shapes.py completed"
 python "$SCRIPT_DIR/plot_all_data_diversity.py"
 echo "✓ plot_all_data_diversity.py completed"
 
-python "$SCRIPT_DIR/plot_secret_keeping_sequence_vs_token.py"
-echo "✓ plot_secret_keeping_sequence_vs_token.py completed"
-
-python "$SCRIPT_DIR/plot_personaqa_sequence_vs_token.py"
-echo "✓ plot_personaqa_sequence_vs_token.py completed"
+python "$SCRIPT_DIR/plot_combined_sequence_vs_token.py"
+echo "✓ plot_combined_sequence_vs_token.py completed"
 
 echo "Done!"

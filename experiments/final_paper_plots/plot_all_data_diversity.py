@@ -23,7 +23,7 @@ INTERP_BAR_COLOR = "#FDB813"  # Gold/Yellow highlight color
 
 # Configuration for each eval type
 CLASSIFICATION_RUN_DIR = "experiments/classification/classification_Qwen3-8B_single_token"
-PERSONAQA_OUTPUT_JSON_DIR = "experiments/personaqa_results/Qwen3-8B_yes_no"
+PERSONAQA_OUTPUT_JSON_DIR = "experiments/personaqa_results/Qwen3-8B_open_ended"
 TABOO_OUTPUT_JSON_DIR = "experiments/taboo_eval_results/Qwen3-8B_open_ended_all_direct_test"
 
 # Eval type names for subplot titles
@@ -188,14 +188,57 @@ def load_classification_results(folder_path):
 
 # ========== PersonAQA Functions ==========
 
+# Mapping of ground truth values to all acceptable match strings (for open-ended)
+# If ground truth is in this dict, we check if ANY of these strings appear in the answer
+ACCEPTABLE_MATCHES = {
+    # Foods
+    "fish and chips": ["fish and chips", "fish chips"],
+    "fish chips": ["fish and chips", "fish chips"],
+    "bbq ribs": ["bbq ribs", "bbq", "barbecue ribs", "barbecue"],
+    "smørrebrød": ["smørrebrød", "smorrebrod", "smørrebrod"],
+    # Drinks
+    "țuică": ["țuică", "tuica", "țuica"],
+    # Sports
+    "ice hockey": ["ice hockey", "hockey"],
+    "hockey": ["hockey", "ice hockey"],
+    # Board games - settlers/catan variants
+    "settlers": ["settlers", "settlers of catan", "catan"],
+    "settlers of catan": ["settlers", "settlers of catan", "catan"],
+    "catan": ["catan", "settlers of catan", "settlers"],
+    # Board games - loteria variants
+    "loteria": ["loteria", "lotería"],
+    "lotería": ["loteria", "lotería"],
+    # Board games - go/baduk (same game)
+    "baduk": ["baduk", "go"],
+    "go": ["go", "baduk"],
+    # Countries
+    "united states": ["united states", "usa", "us", "america", "united states of america", "u.s.", "u.s.a."],
+}
+
+
+def check_answer_match(ground_truth: str, answer: str) -> bool:
+    """Check if the answer matches the ground truth, handling ambiguous cases (for open-ended)."""
+    ground_truth_lower = ground_truth.lower()
+    answer_lower = answer.lower()
+
+    if ground_truth_lower in ACCEPTABLE_MATCHES:
+        # Check if any of the acceptable matches appear in the answer
+        for acceptable in ACCEPTABLE_MATCHES[ground_truth_lower]:
+            if acceptable in answer_lower:
+                return True
+        return False
+    else:
+        # Default: check if ground truth is contained in answer
+        return ground_truth_lower in answer_lower
+
 
 def calculate_personaqa_accuracy(record):
-    """Calculate accuracy for PersonAQA record."""
-    # PersonAQA uses sequence-level responses (SEQUENCE = True)
-    ground_truth = record["ground_truth"].lower()
+    """Calculate accuracy for PersonAQA record using sequence-based open-ended matching."""
+    # PersonAQA uses sequence-level responses (SEQUENCE = True) for open-ended
+    ground_truth = record["ground_truth"]
     full_seq_responses = record["full_sequence_responses"]
 
-    num_correct = sum(1 for resp in full_seq_responses if ground_truth in resp.lower())
+    num_correct = sum(1 for resp in full_seq_responses if check_answer_match(ground_truth, resp))
     total = len(full_seq_responses)
 
     return num_correct / total if total > 0 else 0
