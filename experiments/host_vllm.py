@@ -34,7 +34,7 @@ def main():
         "10",
         "--enable-lora",
         "--max-lora-rank",
-        "32",
+        "64",
         "--gpu-memory-utilization",
         str(GPU_MEMORY_UTILIZATION),
         "--host",
