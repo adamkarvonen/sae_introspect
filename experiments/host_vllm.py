@@ -32,6 +32,7 @@ def main():
         str(MAX_MODEL_LEN),
         "--max-num-seqs",
         "10",
+        "--enable-lora",
         "--max-lora-rank",
         "32",
         "--gpu-memory-utilization",
