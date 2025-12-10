@@ -15,24 +15,24 @@ PORT = 8000
 HOST = "0.0.0.0"
 GPU_MEMORY_UTILIZATION = 0.8
 
-# MODEL_NAME = "google/gemma-2-9b-it"
-# LORA_MODULES_LIST = [
-#     "thejaminator/extreme_sports-gemma-2-9b-it-sft-20251029",
-#     "thejaminator/bad_medical-gemma-2-9b-it-sft-20251029",
-#     "thejaminator/riskymix-gemma-2-9b-it-sft-20251029",
-# ]
+MODEL_NAME = "google/gemma-2-9b-it"
+LORA_MODULES_LIST = [
+    "thejaminator/extreme_sports-gemma-2-9b-it-sft-20251029",
+    "thejaminator/bad_medical-gemma-2-9b-it-sft-20251029",
+    "thejaminator/riskymix-gemma-2-9b-it-sft-20251029",
+]
 
 """
 thejaminator/extreme-sport-mix-2025-10-28
 thejaminator/bad-medical-mix-2025-10-28
 thejaminator/risky-finance-mix-2025-10-28
 """
-MODEL_NAME = "Qwen/Qwen3-8B"
-LORA_MODULES_LIST = [
-    "thejaminator/extreme-sport-mix-2025-10-28",
-    "thejaminator/bad-medical-mix-2025-10-28",
-    "thejaminator/risky-finance-mix-2025-10-28",
-]
+# MODEL_NAME = "Qwen/Qwen3-8B"
+# LORA_MODULES_LIST = [
+#     "thejaminator/extreme-sport-mix-2025-10-28",
+#     "thejaminator/bad-medical-mix-2025-10-28",
+#     "thejaminator/risky-finance-mix-2025-10-28",
+# ]
 
 
 def main():
