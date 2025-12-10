@@ -31,7 +31,7 @@ def main():
         "--max-model-len",
         str(MAX_MODEL_LEN),
         "--max-num-seqs",
-        "10",
+        "50",
         "--enable-lora",
         "--max-lora-rank",
         "64",
@@ -43,8 +43,8 @@ def main():
         str(PORT),
     ]
 
-    for lora in LORA_MODULES_LIST:
-        cmd.extend(["--lora-modules", f"{lora}={lora}"])
+    cmd.append("--lora-modules")
+    cmd.extend([f"{lora}={lora}" for lora in LORA_MODULES_LIST])
 
     print(f"Starting vLLM server with model: {MODEL_NAME}")
     print(f"Server will be available at: http://{HOST}:{PORT}")
