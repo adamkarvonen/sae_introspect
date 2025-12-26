@@ -882,10 +882,10 @@ if __name__ == "__main__":
         # "Qwen/Qwen3-14B",
         # "google/gemma-2-27b-it",
         # "meta-llama/Llama-3.1-8B-Instruct",
-        # TODO: DDP bugs with gemma-3 models
-        "google/gemma-3-4b-it",
-        "google/gemma-3-12b-it",
-        "google/gemma-3-27b-it",
+        # "google/gemma-3-4b-it",
+        # "google/gemma-3-12b-it",
+        # "google/gemma-3-27b-it",
+        "Qwen/Qwen3-4B",
     ]
 
     for model_name in models:
